@@ -1,17 +1,8 @@
 import type { ReactNode } from "react";
 import { Navigate } from "@tanstack/react-router";
+import { LogOut } from "lucide-react";
 import { authEnabled, signOut } from "./client";
 import { useCurrentUser, useCurrentUserState } from "./use-current-user";
-
-/**
- * Auth state components — plain wrappers around `useCurrentUserState()`.
- *
- * Auth is ON by default (including the sandbox live preview, which does real
- * sign-in). Visitors are signed out until they authenticate. The shared dev
- * user only appears when auth is explicitly disabled (`VITE_AUTH_ENABLED=false`).
- * While the session is still resolving, gates that care about signed-out state
- * render nothing so there's no signed-out flash on hard reload.
- */
 
 /** Where `RedirectToSignIn` sends signed-out visitors. Create this route. */
 export const SIGN_IN_PATH = "/login";
@@ -34,48 +25,48 @@ export function SignedOut({ children }: { children: ReactNode }) {
 
 /**
  * Client-side redirect to the sign-in route (TanStack `<Navigate>` — NOT a full
- * `window.location` reload). A hard navigation re-bootstraps the SPA and re-runs
- * session loading, which feels like a second "Loading…" on /login.
- *
- * Guard routes by waiting out `isPending` first (see `use-current-user`), then
- * render this.
+ * `window.location` reload).
  */
 export function RedirectToSignIn({ to = SIGN_IN_PATH }: { to?: string }) {
   return <Navigate to={to} />;
 }
 
 /**
- * Minimal signed-in identity chip + sign-out. Restyle freely (see the
- * `design-ui` skill). Sign-out is only shown when auth is enabled (the
- * disabled-auth dev user has nothing to sign out of).
+ * Compact identity chip + sign-out. Icon-first on small screens.
  */
 export function UserButton() {
   const user = useCurrentUser();
   if (!user) return null;
   const label = user.displayName ?? user.primaryEmail ?? "Account";
+  const initial = label.charAt(0).toUpperCase();
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex max-w-[11rem] items-center gap-1.5 rounded-xl border border-border bg-bg px-1.5 py-1 sm:max-w-none sm:gap-2 sm:px-2 sm:py-1.5">
       {user.profileImageUrl ? (
         <img
           src={user.profileImageUrl}
           alt=""
-          className="h-8 w-8 rounded-full object-cover"
+          className="size-8 shrink-0 rounded-lg object-cover"
         />
       ) : (
-        <span className="grid h-8 w-8 place-items-center rounded-full bg-black/10 text-sm font-medium dark:bg-white/20">
-          {label.charAt(0).toUpperCase()}
+        <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-primary-soft text-sm font-semibold text-primary">
+          {initial}
         </span>
       )}
-      <span className="text-sm font-medium">{label}</span>
-      {authEnabled && (
+      <span className="hidden min-w-0 truncate text-sm font-medium text-fg sm:inline">
+        {label.split(" ")[0]}
+      </span>
+      {authEnabled ? (
         <button
           type="button"
           onClick={() => void signOut()}
-          className="cursor-pointer text-sm underline-offset-4 opacity-70 hover:underline"
+          className="inline-flex min-h-9 min-w-9 shrink-0 items-center justify-center gap-1 rounded-lg px-1.5 text-xs font-medium text-fg-muted transition-colors hover:bg-bg-subtle hover:text-fg active:bg-bg-subtle sm:min-w-0 sm:px-2"
+          aria-label="Sign Out"
+          title="Sign Out"
         >
-          Sign out
+          <LogOut className="size-3.5" />
+          <span className="hidden sm:inline">Sign Out</span>
         </button>
-      )}
+      ) : null}
     </div>
   );
 }

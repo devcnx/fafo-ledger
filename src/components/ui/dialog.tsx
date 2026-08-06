@@ -33,15 +33,23 @@ export const DialogContent = React.forwardRef<
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
-        "fixed top-1/2 left-1/2 z-50 grid w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 gap-4 rounded-2xl border border-border bg-bg-elevated p-5 shadow-lg",
-        "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
+        // Mobile-first: bottom sheet on small screens, centered card from sm up
+        "fixed z-50 grid gap-4 border border-border bg-bg-elevated shadow-lg",
+        "inset-x-0 bottom-0 max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]",
+        "sm:inset-auto sm:top-1/2 sm:left-1/2 sm:bottom-auto sm:max-h-[85dvh] sm:w-[calc(100%-2rem)] sm:max-w-lg sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-2xl sm:pb-5",
+        "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom sm:data-[state=closed]:zoom-out-95 sm:data-[state=open]:zoom-in-95 sm:data-[state=closed]:slide-out-to-bottom-0 sm:data-[state=open]:slide-in-from-bottom-0",
         className,
       )}
       {...props}
     >
+      {/* grab handle on mobile */}
+      <div
+        className="mx-auto mb-1 h-1 w-10 shrink-0 rounded-full bg-border-strong sm:hidden"
+        aria-hidden
+      />
       {children}
-      <DialogPrimitive.Close className="absolute top-4 right-4 rounded-md p-1 text-fg-muted opacity-70 transition-opacity hover:opacity-100">
-        <X className="size-4" />
+      <DialogPrimitive.Close className="absolute top-4 right-4 grid size-11 place-items-center rounded-lg text-fg-muted opacity-80 transition-opacity hover:opacity-100 sm:size-9 sm:p-1">
+        <X className="size-5" />
         <span className="sr-only">Close</span>
       </DialogPrimitive.Close>
     </DialogPrimitive.Content>
@@ -50,7 +58,7 @@ export const DialogContent = React.forwardRef<
 DialogContent.displayName = DialogPrimitive.Content.displayName;
 
 export function DialogHeader({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("flex flex-col gap-1.5 pr-6 text-left", className)} {...props} />;
+  return <div className={cn("flex flex-col gap-1.5 pr-10 text-left", className)} {...props} />;
 }
 
 export function DialogTitle({

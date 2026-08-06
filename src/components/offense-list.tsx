@@ -109,22 +109,22 @@ export function OffenseList() {
   }
 
   async function handleDelete(id: string) {
-    if (!confirm("Delete this entry permanently?")) return;
+    if (!confirm("Delete This Entry Permanently?")) return;
     try {
       await deleteOffense(id);
-      toast.success("Entry deleted.");
+      toast.success("Entry Deleted.");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Delete failed");
+      toast.error(e instanceof Error ? e.message : "Delete Failed");
     }
   }
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Offense history</CardTitle>
+        <CardTitle>Offense History</CardTitle>
         <CardDescription>
-          Bidirectional ledger — both of you log, both of you can dispute what the other filed.{" "}
-          {filtered.length} shown.
+          Bidirectional Ledger — Both of You Log, Both of You Can Dispute What the Other Filed.{" "}
+          {filtered.length} Shown.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -132,7 +132,7 @@ export function OffenseList() {
           <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-fg-subtle" />
           <Input
             className="pl-9"
-            placeholder="Search titles, notes, moods, disputes…"
+            placeholder="Search Titles, Notes, Moods, Disputes…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
@@ -153,25 +153,25 @@ export function OffenseList() {
               key={v}
               type="button"
               onClick={() => setSev(v)}
-              className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+              className={`min-h-10 rounded-full border px-3 py-2 text-xs font-medium transition-colors ${
                 sev === v
                   ? "border-primary bg-primary-soft text-primary"
                   : "border-border bg-bg-elevated text-fg-muted hover:bg-bg-subtle"
               }`}
             >
-              {v === "all" ? "All severities" : `Sev ${label}`}
+              {v === "all" ? "All Severities" : `Sev ${label}`}
             </button>
           ))}
           <button
             type="button"
             onClick={() => setShowArchived((v) => !v)}
-            className={`rounded-full border px-3 py-1.5 text-xs font-medium ${
+            className={`min-h-10 rounded-full border px-3 py-2 text-xs font-medium ${
               showArchived
                 ? "border-primary bg-primary-soft text-primary"
                 : "border-border bg-bg-elevated text-fg-muted"
             }`}
           >
-            {showArchived ? "Viewing archive" : "Active only"}
+            {showArchived ? "Viewing Archive" : "Active Only"}
           </button>
         </div>
 
@@ -179,9 +179,9 @@ export function OffenseList() {
           <select
             value={status}
             onChange={(e) => setStatusFilter(e.target.value as FilterStatus)}
-            className="flex h-10 w-full rounded-lg border border-border bg-bg-elevated px-3 text-sm text-fg"
+            className="field-control"
           >
-            <option value="all">All statuses</option>
+            <option value="all">All Statuses</option>
             <option value="open">Open</option>
             <option value="forgiven">Forgiven</option>
             <option value="pattern">Pattern</option>
@@ -189,9 +189,9 @@ export function OffenseList() {
           <select
             value={category}
             onChange={(e) => setCategory(e.target.value)}
-            className="flex h-10 w-full rounded-lg border border-border bg-bg-elevated px-3 text-sm text-fg"
+            className="field-control"
           >
-            <option value="all">All categories</option>
+            <option value="all">All Categories</option>
             {categories.map((c) => (
               <option key={c} value={c}>
                 {c}
@@ -202,11 +202,11 @@ export function OffenseList() {
 
         {filtered.length === 0 ? (
           <div className="rounded-xl border border-dashed border-border px-4 py-12 text-center">
-            <p className="font-medium text-fg">No matching offenses</p>
+            <p className="font-medium text-fg">No Matching Offenses</p>
             <p className="mt-1 text-sm text-fg-muted">
               {offenses.length === 0
-                ? "The ledger is clean. Log the next one when it happens."
-                : "Try a different filter or search."}
+                ? "The Ledger Is Clean. Log the Next One When It Happens."
+                : "Try a Different Filter or Search."}
             </p>
           </div>
         ) : (
@@ -232,12 +232,12 @@ export function OffenseList() {
                               : "warn"
                         }
                       >
-                        {o.status}
+                        {o.status === "open" ? "Open" : o.status === "forgiven" ? "Forgiven" : o.status === "pattern" ? "Pattern" : o.status}
                       </Badge>
                       <Badge variant="outline">
                         {nameForRole(o.authorRole)} → {nameForRole(o.againstRole)}
                       </Badge>
-                      {o.archived ? <Badge variant="muted">archived</Badge> : null}
+                      {o.archived ? <Badge variant="muted">Archived</Badge> : null}
                       {pending.length > 0 ? (
                         <Badge variant="warn">
                           {pending.length} pending dispute{pending.length === 1 ? "" : "s"}
@@ -278,12 +278,12 @@ export function OffenseList() {
                   {itemDisputes.length > 0 ? (
                     <div className="mt-3 space-y-2 rounded-lg border border-border bg-bg-elevated p-3">
                       <p className="text-xs font-semibold tracking-wide text-fg-muted uppercase">
-                        Disputes & appeals
+                        Disputes & Appeals
                       </p>
                       {itemDisputes.map((d) => (
                         <div key={d.id} className="rounded-md border border-border bg-bg p-3 text-sm">
                           <div className="flex flex-wrap items-center gap-2">
-                            <Badge variant="outline">{d.kind}</Badge>
+                            <Badge variant="outline">{d.kind === "dispute" ? "Dispute" : d.kind === "appeal" ? "Appeal" : d.kind}</Badge>
                             <Badge
                               variant={
                                 d.status === "pending"
@@ -295,7 +295,7 @@ export function OffenseList() {
                                       : "muted"
                               }
                             >
-                              {d.status}
+                              {d.status === "pending" ? "Pending" : d.status === "accepted" ? "Accepted" : d.status === "rejected" ? "Rejected" : d.status === "withdrawn" ? "Withdrawn" : d.status}
                             </Badge>
                             <span className="text-xs text-fg-subtle">
                               {nameForRole(d.authorRole)} · {formatDateTime(d.createdAt)}
@@ -313,7 +313,7 @@ export function OffenseList() {
                             {isAuthor(o) && d.status === "pending" ? (
                               <Button variant="soft" size="sm" onClick={() => setResolving(d)}>
                                 <Gavel className="size-3.5" />
-                                Rule on this
+                                Rule on This
                               </Button>
                             ) : null}
                             {d.authorRole === role && d.status === "pending" ? (
@@ -323,10 +323,10 @@ export function OffenseList() {
                                 onClick={async () => {
                                   try {
                                     await withdrawDispute(d.id);
-                                    toast.success("Dispute withdrawn.");
+                                    toast.success("Dispute Withdrawn.");
                                   } catch (e) {
                                     toast.error(
-                                      e instanceof Error ? e.message : "Withdraw failed",
+                                      e instanceof Error ? e.message : "Withdraw Failed",
                                     );
                                   }
                                 }}
@@ -340,11 +340,11 @@ export function OffenseList() {
                     </div>
                   ) : null}
 
-                  <div className="mt-3 flex flex-wrap justify-end gap-1">
+                  <div className="mt-3 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:justify-end">
                     {canDispute(o) ? (
                       <Button variant="soft" size="sm" onClick={() => setDisputing(o)}>
                         <Gavel className="size-3.5" />
-                        Dispute / appeal
+                        Dispute / Appeal
                       </Button>
                     ) : null}
                     {canEdit(o) ? (
@@ -359,7 +359,7 @@ export function OffenseList() {
                             size="sm"
                             onClick={() =>
                               void setStatus(o.id, "forgiven").then(() =>
-                                toast.success("Marked forgiven."),
+                                toast.success("Marked Forgiven."),
                               )
                             }
                           >
@@ -419,9 +419,9 @@ export function OffenseList() {
               try {
                 await updateOffense(id, patch);
                 setEditing(null);
-                toast.success("Entry updated.");
+                toast.success("Entry Updated.");
               } catch (e) {
-                toast.error(e instanceof Error ? e.message : "Update failed");
+                toast.error(e instanceof Error ? e.message : "Update Failed");
               }
             }}
           />
@@ -437,9 +437,9 @@ export function OffenseList() {
               try {
                 await submitDispute({ offenseId: disputing.id, kind, body, evidence });
                 setDisputing(null);
-                toast.success("Dispute filed.");
+                toast.success("Dispute Filed.");
               } catch (e) {
-                toast.error(e instanceof Error ? e.message : "Could not file dispute");
+                toast.error(e instanceof Error ? e.message : "Could Not File Dispute");
               }
             }}
           />
@@ -464,7 +464,7 @@ export function OffenseList() {
                   status === "accepted" ? "Dispute accepted." : "Dispute rejected.",
                 );
               } catch (e) {
-                toast.error(e instanceof Error ? e.message : "Resolve failed");
+                toast.error(e instanceof Error ? e.message : "Resolve Failed");
               }
             }}
           />
@@ -500,8 +500,8 @@ function EditForm({
   return (
     <DialogContent>
       <DialogHeader>
-        <DialogTitle>Edit offense</DialogTitle>
-        <DialogDescription>Update the record. Times are Central.</DialogDescription>
+        <DialogTitle>Edit Offense</DialogTitle>
+        <DialogDescription>Update the Record. Times Are Central.</DialogDescription>
       </DialogHeader>
       <div className="max-h-[70vh] space-y-3 overflow-y-auto pr-1">
         <div>
@@ -517,7 +517,7 @@ function EditForm({
           <select
             value={category}
             onChange={(e) => setCategory(e.target.value)}
-            className="flex h-10 w-full rounded-lg border border-border bg-bg-elevated px-3 text-sm"
+            className="field-control"
           >
             {categories.map((c) => (
               <option key={c} value={c}>
@@ -531,7 +531,7 @@ function EditForm({
           <select
             value={status}
             onChange={(e) => setStatus(e.target.value as OffenseStatus)}
-            className="flex h-10 w-full rounded-lg border border-border bg-bg-elevated px-3 text-sm"
+            className="field-control"
           >
             <option value="open">Open</option>
             <option value="forgiven">Forgiven</option>
@@ -543,7 +543,7 @@ function EditForm({
           <Input value={title} onChange={(e) => setTitle(e.target.value)} />
         </div>
         <div>
-          <Label>What happened</Label>
+          <Label>What Happened</Label>
           <Textarea value={description} onChange={(e) => setDescription(e.target.value)} />
         </div>
         <div>
@@ -583,7 +583,7 @@ function EditForm({
               }
             }}
           >
-            {saving ? "Saving…" : "Save changes"}
+            {saving ? "Saving…" : "Save Changes"}
           </Button>
         </div>
       </div>
@@ -612,9 +612,9 @@ function DisputeForm({
   return (
     <DialogContent>
       <DialogHeader>
-        <DialogTitle>Dispute or appeal</DialogTitle>
+        <DialogTitle>Dispute or Appeal</DialogTitle>
         <DialogDescription>
-          Challenge “{offense.title}”. Attach counter-evidence if you have it.
+          Challenge “{offense.title}”. Attach Counter-Evidence If You Have It.
         </DialogDescription>
       </DialogHeader>
       <div className="max-h-[70vh] space-y-3 overflow-y-auto">
@@ -623,24 +623,24 @@ function DisputeForm({
           <select
             value={kind}
             onChange={(e) => setKind(e.target.value as "dispute" | "appeal")}
-            className="flex h-10 w-full rounded-lg border border-border bg-bg-elevated px-3 text-sm"
+            className="field-control"
           >
-            <option value="dispute">Dispute (facts are wrong / incomplete)</option>
-            <option value="appeal">Appeal (severity or outcome unfair)</option>
+            <option value="dispute">Dispute (Facts Are Wrong / Incomplete)</option>
+            <option value="appeal">Appeal (Severity or Outcome Unfair)</option>
           </select>
         </div>
         <div>
-          <Label>Your statement</Label>
+          <Label>Your Statement</Label>
           <Textarea
             value={body}
             onChange={(e) => setBody(e.target.value)}
-            placeholder="What should be corrected, and why?"
+            placeholder="What Should Be Corrected, and Why?"
             className="min-h-28"
             required
           />
         </div>
         <div>
-          <Label>Counter-evidence</Label>
+          <Label>Counter-Evidence</Label>
           <EvidencePicker value={evidence} onChange={setEvidence} />
         </div>
         <div className="flex justify-end gap-2">
@@ -659,7 +659,7 @@ function DisputeForm({
               }
             }}
           >
-            {saving ? "Filing…" : "File dispute"}
+            {saving ? "Filing…" : "File Dispute"}
           </Button>
         </div>
       </div>
@@ -687,8 +687,8 @@ function ResolveForm({
   return (
     <DialogContent>
       <DialogHeader>
-        <DialogTitle>Rule on {dispute.kind}</DialogTitle>
-        <DialogDescription>Their statement is on the record.</DialogDescription>
+        <DialogTitle>Rule on {dispute.kind === "appeal" ? "Appeal" : "Dispute"}</DialogTitle>
+        <DialogDescription>Their Statement Is on the Record.</DialogDescription>
       </DialogHeader>
       <div className="space-y-3">
         <div className="rounded-lg border border-border bg-bg p-3 text-sm text-fg">
@@ -696,11 +696,11 @@ function ResolveForm({
         </div>
         <EvidenceList items={dispute.evidence} />
         <div>
-          <Label>Your response (optional)</Label>
+          <Label>Your Response (Optional)</Label>
           <Textarea
             value={response}
             onChange={(e) => setResponse(e.target.value)}
-            placeholder="What you decide, and why."
+            placeholder="What You Decide, and Why."
             className="min-h-20"
           />
         </div>
@@ -711,7 +711,7 @@ function ResolveForm({
             onChange={(e) => setForgive(e.target.checked)}
             className="size-4 rounded border-border"
           />
-          If accepted, also mark the offense forgiven
+          If Accepted, Also Mark the Offense Forgiven
         </label>
         <div className="flex flex-wrap justify-end gap-2">
           <Button variant="secondary" type="button" onClick={onClose}>

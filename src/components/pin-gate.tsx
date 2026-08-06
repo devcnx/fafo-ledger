@@ -47,7 +47,7 @@ export function PinGate({ children }: { children: React.ReactNode }) {
       return;
     }
     if (setupA !== setupB) {
-      setError("PINs don’t match.");
+      setError("PINs Don’t Match.");
       return;
     }
     const h = await hashPin(setupA);
@@ -71,8 +71,8 @@ export function PinGate({ children }: { children: React.ReactNode }) {
               <Lock className="size-5" />
             </span>
             <div>
-              <h1 className="font-display text-xl font-semibold">PIN lock</h1>
-              <p className="text-sm text-fg-muted">Extra privacy after login.</p>
+              <h1 className="font-display text-xl font-semibold">PIN Lock</h1>
+              <p className="text-sm text-fg-muted">Extra Privacy After Login.</p>
             </div>
           </div>
           <div>

@@ -17,7 +17,7 @@ function Home() {
       <main className="grid min-h-[calc(100dvh-var(--grok-banner-h,0px))] place-items-center bg-bg">
         <div className="space-y-3 text-center">
           <div className="mx-auto h-10 w-48 animate-pulse rounded-xl bg-bg-subtle" />
-          <p className="text-sm text-fg-muted">Checking session…</p>
+          <p className="text-sm text-fg-muted">Checking Session…</p>
         </div>
       </main>
     );

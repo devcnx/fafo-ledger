@@ -33,7 +33,7 @@ export function EvidencePicker({
         if (forceAudio) item.type = "audio";
         next.push(item);
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Could not attach file");
+        toast.error(e instanceof Error ? e.message : "Could Not Attach File");
       }
     }
     onChange(next);
@@ -55,15 +55,15 @@ export function EvidencePicker({
       <div className="flex flex-wrap gap-2">
         <Button type="button" variant="secondary" size="sm" onClick={() => fileRef.current?.click()}>
           <ImagePlus className="size-3.5" />
-          Photo / screenshot
+          Photo / Screenshot
         </Button>
         <Button type="button" variant="secondary" size="sm" onClick={() => audioRef.current?.click()}>
           <Mic className="size-3.5" />
-          Voice note
+          Voice Note
         </Button>
         <Button type="button" variant="secondary" size="sm" onClick={() => setShowPaste((v) => !v)}>
           <Type className="size-3.5" />
-          Paste text
+          Paste Text
         </Button>
         <input
           ref={fileRef}
@@ -87,12 +87,12 @@ export function EvidencePicker({
           <Textarea
             value={paste}
             onChange={(e) => setPaste(e.target.value)}
-            placeholder="Paste a text thread, screenshots transcription, etc."
+            placeholder="Paste a Text Thread, Screenshots Transcription, Etc."
             className="min-h-20"
           />
           <Button type="button" size="sm" onClick={addPaste}>
             <Paperclip className="size-3.5" />
-            Attach text
+            Attach Text
           </Button>
         </div>
       ) : null}
@@ -105,7 +105,7 @@ export function EvidencePicker({
               className="flex items-start gap-3 rounded-lg border border-border bg-bg-elevated p-2"
             >
               <div className="min-w-0 flex-1">
-                <p className="text-xs font-medium text-fg-muted uppercase">{item.type}</p>
+                <p className="text-xs font-medium text-fg-muted uppercase">{item.type === "image" ? "Image" : item.type === "audio" ? "Audio" : item.type === "text" ? "Text" : item.type === "file" ? "File" : item.type}</p>
                 <p className="truncate text-sm text-fg">{item.name}</p>
                 {item.type === "image" && item.data.startsWith("data:") ? (
                   <img
@@ -147,7 +147,7 @@ export function EvidenceList({ items }: { items: EvidenceItem[] }) {
       {items.map((item) => (
         <div key={item.id} className="rounded-lg border border-border bg-bg-subtle p-2 text-sm">
           <p className="text-xs text-fg-muted">
-            {item.type} · {item.name}
+            {item.type === "image" ? "Image" : item.type === "audio" ? "Audio" : item.type === "text" ? "Text" : item.type === "file" ? "File" : item.type} · {item.name}
           </p>
           {item.type === "image" && item.data.startsWith("data:") ? (
             <img

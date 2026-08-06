@@ -56,9 +56,15 @@ import { DEFAULT_CATEGORIES } from "@/lib/constants";
 type LedgerContextValue = {
   loading: boolean;
   error: string | null;
+  needsOnboarding: boolean;
   role: AppRole | null;
   email: string | null;
   displayName: string | null;
+  householdId: string | null;
+  householdName: string | null;
+  householdMode: "solo" | "couple" | null;
+  inviteCode: string | null;
+  isOwner: boolean;
   profile: Profile;
   settings: AppSettings;
   offenses: Offense[];
@@ -229,9 +235,15 @@ export function LedgerProvider({ children }: { children: ReactNode }) {
     return {
       loading,
       error,
+      needsOnboarding: snap?.needsOnboarding ?? false,
       role: snap?.role ?? null,
       email: snap?.email ?? null,
       displayName: snap?.displayName ?? null,
+      householdId: snap?.householdId ?? null,
+      householdName: snap?.householdName ?? null,
+      householdMode: snap?.householdMode ?? null,
+      inviteCode: snap?.inviteCode ?? null,
+      isOwner: snap?.isOwner ?? false,
       profile: snap?.profile ?? emptyProfile,
       settings: snap?.settings ?? emptySettings,
       offenses: snap?.offenses ?? [],

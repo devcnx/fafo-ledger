@@ -29,21 +29,21 @@ export function SeverityPicker({
             title={severityLabel(level, labels)}
             onClick={() => onChange(level)}
             className={cn(
-              "flex min-h-16 flex-col items-center justify-center gap-1 rounded-xl border px-1 py-2 text-center transition-all",
+              "flex min-h-[4.25rem] flex-col items-center justify-center gap-1 rounded-xl border px-0.5 py-2 text-center transition-all touch-manipulation sm:min-h-16 sm:px-1",
               active
                 ? "border-primary bg-primary-soft shadow-sm ring-2 ring-primary/20"
-                : "border-border bg-bg-elevated hover:border-border-strong hover:bg-bg-subtle",
+                : "border-border bg-bg-elevated active:bg-bg-subtle sm:hover:border-border-strong sm:hover:bg-bg-subtle",
             )}
           >
             <span
-              className="text-base font-semibold tabular-nums"
+              className="text-base font-semibold tabular-nums sm:text-lg"
               style={{ color: meta.color }}
             >
               {level}
             </span>
             <span
               className={cn(
-                "line-clamp-2 text-[10px] font-medium leading-tight sm:text-xs",
+                "line-clamp-2 max-w-full px-0.5 text-[9px] font-medium leading-tight sm:text-xs",
                 active ? "text-primary" : "text-fg-muted",
               )}
             >
@@ -66,11 +66,13 @@ export function SeverityBadge({
   const meta = SEVERITY_META[severity];
   return (
     <span
-      className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold"
+      className="inline-flex max-w-full items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold"
       style={{ background: meta.soft, color: meta.color }}
     >
       <span className="tabular-nums">{severity}</span>
-      <span>{labels?.[severity] ? labels[severity]!.slice(0, 18) : meta.short}</span>
+      <span className="truncate">
+        {labels?.[severity] ? labels[severity]!.slice(0, 18) : meta.short}
+      </span>
     </span>
   );
 }

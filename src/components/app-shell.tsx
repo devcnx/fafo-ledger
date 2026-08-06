@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   BarChart3,
   BookOpen,
@@ -7,12 +7,14 @@ import {
   Gavel,
   Heart,
   LayoutDashboard,
+  MoreHorizontal,
   Quote,
   Scale,
   ScrollText,
   Settings,
   ShieldAlert,
   Sparkles,
+  type LucideIcon,
 } from "lucide-react";
 import { Toaster } from "sonner";
 import {
@@ -27,19 +29,67 @@ import { Insights } from "@/components/insights";
 import { LogForm } from "@/components/log-form";
 import { NotificationsBell } from "@/components/notifications-bell";
 import { OffenseList } from "@/components/offense-list";
+import { Onboarding } from "@/components/onboarding";
 import { ScoreboardPanel } from "@/components/scoreboard";
 import { SettingsPanel } from "@/components/settings-panel";
 import { StatsGrid } from "@/components/stats-grid";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { UserButton } from "@/lib/auth/gates";
 import { APP_NAME, APP_TAGLINE, THEME_STORAGE_KEY } from "@/lib/constants";
 import { useLedger } from "@/lib/ledger-context";
-import { daysBetween, formatDate } from "@/lib/utils";
+import { cn, daysBetween, formatDate } from "@/lib/utils";
+
+type TabId =
+  | "log"
+  | "history"
+  | "board"
+  | "case"
+  | "sorry"
+  | "rules"
+  | "love"
+  | "quotes"
+  | "insights"
+  | "fafo"
+  | "settings";
+
+const PRIMARY_TABS: { id: TabId; label: string; icon: LucideIcon }[] = [
+  { id: "log", label: "Log", icon: BookOpen },
+  { id: "history", label: "History", icon: ScrollText },
+  { id: "board", label: "Board", icon: LayoutDashboard },
+  { id: "fafo", label: "FAFO", icon: FileWarning },
+];
+
+const MORE_TABS: { id: TabId; label: string; icon: LucideIcon }[] = [
+  { id: "case", label: "Case", icon: Briefcase },
+  { id: "sorry", label: "Sorry", icon: Sparkles },
+  { id: "rules", label: "Rules", icon: Scale },
+  { id: "love", label: "Love", icon: Heart },
+  { id: "quotes", label: "Quotes", icon: Quote },
+  { id: "insights", label: "Insights", icon: BarChart3 },
+  { id: "settings", label: "Settings", icon: Settings },
+];
+
+const ALL_TABS = [...PRIMARY_TABS, ...MORE_TABS];
 
 export function AppShell() {
-  const { profile, offenses, disputes, role, displayName, loading, error, refresh } = useLedger();
-  const [tab, setTab] = useState("log");
+  const {
+    profile,
+    offenses,
+    disputes,
+    role,
+    displayName,
+    email,
+    loading,
+    error,
+    refresh,
+    needsOnboarding,
+    isOwner,
+    inviteCode,
+    householdMode,
+  } = useLedger();
+  const [tab, setTab] = useState<string>("log");
+  const [moreOpen, setMoreOpen] = useState(false);
 
   useEffect(() => {
     const t = (localStorage.getItem(THEME_STORAGE_KEY) as "light" | "dark" | "system") || "system";
@@ -50,29 +100,52 @@ export function AppShell() {
     document.documentElement.style.colorScheme = dark ? "dark" : "light";
   }, []);
 
+  // Keep active top-tab scrolled into view on desktop
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const el = document.querySelector<HTMLElement>(`[data-tab-id="${tab}"]`);
+    el?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+  }, [tab]);
+
   const together = daysBetween(profile.anniversary);
   const pendingDisputes = disputes.filter((d) => d.status === "pending").length;
+  const moreActive = useMemo(() => MORE_TABS.some((t) => t.id === tab), [tab]);
 
   if (loading) {
     return (
-      <main className="grid min-h-[calc(100dvh-var(--grok-banner-h,0px))] place-items-center bg-bg">
-        <div className="space-y-3 text-center">
-          <div className="mx-auto h-10 w-56 animate-pulse rounded-xl bg-bg-subtle" />
-          <p className="text-sm text-fg-muted">Loading ledger…</p>
+      <main className="grid min-h-[calc(100dvh-var(--grok-banner-h,0px))] place-items-center bg-bg px-4">
+        <div className="w-full max-w-sm space-y-3 text-center">
+          <div className="mx-auto h-10 w-48 max-w-full animate-pulse rounded-xl bg-bg-subtle" />
+          <p className="text-sm text-fg-muted">Loading Ledger…</p>
         </div>
       </main>
+    );
+  }
+
+  if (needsOnboarding) {
+    return (
+      <div className="min-h-[calc(100dvh-var(--grok-banner-h,0px))] bg-bg">
+        <Onboarding
+          displayName={displayName ?? ""}
+          email={email ?? ""}
+          onDone={async () => {
+            await refresh();
+          }}
+        />
+        <Toaster position="bottom-center" />
+      </div>
     );
   }
 
   if (error && !role) {
     return (
       <main className="grid min-h-[calc(100dvh-var(--grok-banner-h,0px))] place-items-center bg-bg px-4">
-        <div className="max-w-md space-y-3 text-center">
-          <p className="font-display text-xl font-semibold text-fg">Access denied</p>
+        <div className="w-full max-w-md space-y-3 text-center">
+          <p className="font-display text-xl font-semibold text-fg">Access Denied</p>
           <p className="text-sm text-fg-muted">{error}</p>
           <button
             type="button"
-            className="text-sm font-medium text-primary underline"
+            className="min-h-11 text-sm font-medium text-primary underline"
             onClick={() => void refresh()}
           >
             Retry
@@ -83,146 +156,235 @@ export function AppShell() {
   }
 
   const isTracker = role === "tracker";
+  const roleBadge = isOwner
+    ? `${displayName?.split(" ")[0] ?? "You"} · Owner`
+    : isTracker
+      ? `${profile.trackerName.split(" ")[0]} · Tracker`
+      : `${profile.subjectName.split(" ")[0]} · Partner`;
+
+  function selectTab(id: string) {
+    setTab(id);
+    setMoreOpen(false);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
 
   return (
-    <div className="min-h-[calc(100dvh-var(--grok-banner-h,0px))] bg-bg">
-      <header className="border-b border-border bg-bg-elevated">
-        <div className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-6 sm:px-6">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <span className="grid size-9 place-items-center rounded-xl bg-primary text-primary-fg shadow-sm">
-                  <ShieldAlert className="size-5" strokeWidth={2} />
-                </span>
-                <div>
-                  <h1 className="font-display text-xl font-semibold tracking-tight text-fg sm:text-2xl">
-                    {APP_NAME}
-                  </h1>
-                  <p className="text-xs text-fg-muted sm:text-sm">{APP_TAGLINE}</p>
-                </div>
+    <div className="relative min-h-[calc(100dvh-var(--grok-banner-h,0px))] w-full overflow-x-clip bg-bg">
+      <header className="sticky top-0 z-30 border-b border-border bg-bg-elevated/95 backdrop-blur-md supports-[backdrop-filter]:bg-bg-elevated/90">
+        <div className="mx-auto w-full max-w-4xl px-3 py-3 sm:px-6 sm:py-4">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex min-w-0 flex-1 items-center gap-2.5">
+              <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-primary text-primary-fg shadow-sm sm:size-10">
+                <ShieldAlert className="size-4 sm:size-5" strokeWidth={2} />
+              </span>
+              <div className="min-w-0 flex-1">
+                <h1 className="truncate font-display text-lg font-semibold tracking-tight text-fg sm:text-xl md:text-2xl">
+                  {APP_NAME}
+                </h1>
+                <p className="truncate text-[11px] leading-snug text-fg-muted sm:text-sm">
+                  {APP_TAGLINE}
+                </p>
               </div>
             </div>
-            <div className="flex shrink-0 items-center gap-2">
-              <NotificationsBell onNavigate={setTab} />
+            <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+              <NotificationsBell onNavigate={selectTab} />
               <UserButton />
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            <Badge variant="default">{displayName ?? "Signed in"}</Badge>
-            <Badge variant={isTracker ? "danger" : "warn"}>
-              {isTracker ? "Brittaney · full access" : "Michael · log + dispute"}
+          <div className="scroll-x mt-3 flex gap-1.5 pb-0.5">
+            <Badge variant="default" className="shrink-0">
+              {displayName?.split(" ")[0] ?? "Signed In"}
             </Badge>
-            <Badge variant="muted">
+            <Badge variant={isTracker ? "danger" : "warn"} className="shrink-0">
+              {roleBadge}
+            </Badge>
+            <Badge variant="muted" className="shrink-0">
               {profile.trackerName.split(" ")[0]} ⇄ {profile.subjectName.split(" ")[0]}
             </Badge>
-            <Badge variant="outline">Anniv {formatDate(profile.anniversary)}</Badge>
-            <Badge variant="outline">{together} days together</Badge>
+            {householdMode ? (
+              <Badge variant="outline" className="shrink-0">
+                {householdMode === "solo" ? "Solo" : "Couple"}
+              </Badge>
+            ) : null}
+            <Badge variant="outline" className="shrink-0">
+              {formatDate(profile.anniversary)}
+            </Badge>
+            <Badge variant="outline" className="shrink-0">
+              {together}d
+            </Badge>
             {pendingDisputes > 0 ? (
-              <Badge variant="warn">
+              <Badge variant="warn" className="shrink-0">
                 <Gavel className="mr-1 size-3" />
-                {pendingDisputes} pending dispute{pendingDisputes === 1 ? "" : "s"}
+                {pendingDisputes}
+              </Badge>
+            ) : null}
+            {isOwner && inviteCode ? (
+              <Badge variant="outline" className="shrink-0 font-mono tracking-wide">
+                {inviteCode}
               </Badge>
             ) : null}
           </div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-3xl px-4 py-6 sm:px-6 sm:py-8">
+      <main className="mx-auto w-full max-w-4xl px-3 py-4 pb-nav sm:px-6 sm:py-6 sm:pb-10">
         <StatsGrid offenses={offenses} role={role} />
 
-        <Tabs value={tab} onValueChange={setTab} className="mt-6">
-          <div className="overflow-x-auto pb-1">
-            <TabsList className="inline-flex h-auto min-w-full flex-wrap justify-start gap-1 sm:flex-nowrap">
-              <TabsTrigger value="log" className="gap-1 px-2 text-xs sm:text-sm">
-                <BookOpen className="size-3.5" />
-                Log
-              </TabsTrigger>
-              <TabsTrigger value="history" className="gap-1 px-2 text-xs sm:text-sm">
-                <ScrollText className="size-3.5" />
-                History
-              </TabsTrigger>
-              <TabsTrigger value="board" className="gap-1 px-2 text-xs sm:text-sm">
-                <LayoutDashboard className="size-3.5" />
-                Board
-              </TabsTrigger>
-              <TabsTrigger value="case" className="gap-1 px-2 text-xs sm:text-sm">
-                <Briefcase className="size-3.5" />
-                Case
-              </TabsTrigger>
-              <TabsTrigger value="sorry" className="gap-1 px-2 text-xs sm:text-sm">
-                <Sparkles className="size-3.5" />
-                Sorry
-              </TabsTrigger>
-              <TabsTrigger value="rules" className="gap-1 px-2 text-xs sm:text-sm">
-                <Scale className="size-3.5" />
-                Rules
-              </TabsTrigger>
-              <TabsTrigger value="love" className="gap-1 px-2 text-xs sm:text-sm">
-                <Heart className="size-3.5" />
-                Love
-              </TabsTrigger>
-              <TabsTrigger value="quotes" className="gap-1 px-2 text-xs sm:text-sm">
-                <Quote className="size-3.5" />
-                Quotes
-              </TabsTrigger>
-              <TabsTrigger value="insights" className="gap-1 px-2 text-xs sm:text-sm">
-                <BarChart3 className="size-3.5" />
-                Insights
-              </TabsTrigger>
-              <TabsTrigger value="fafo" className="gap-1 px-2 text-xs sm:text-sm">
-                <FileWarning className="size-3.5" />
-                FAFO
-              </TabsTrigger>
-              <TabsTrigger value="settings" className="gap-1 px-2 text-xs sm:text-sm">
-                <Settings className="size-3.5" />
-                Settings
-              </TabsTrigger>
-            </TabsList>
+        <Tabs value={tab} onValueChange={selectTab} className="mt-4 sm:mt-6">
+          {/* Single-row horizontal scroll tabs (tablet/desktop) */}
+          <div className="mb-4 hidden sm:block">
+            <div className="scroll-x rounded-xl border border-border bg-bg-subtle p-1.5">
+              <div className="flex w-max min-w-full gap-1">
+                {ALL_TABS.map(({ id, label, icon: Icon }) => (
+                  <button
+                    key={id}
+                    type="button"
+                    data-tab-id={id}
+                    onClick={() => selectTab(id)}
+                    className={cn(
+                      "inline-flex min-h-10 shrink-0 items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors touch-manipulation",
+                      tab === id
+                        ? "bg-bg-elevated text-fg shadow-sm"
+                        : "text-fg-muted hover:bg-bg-elevated/60 hover:text-fg",
+                    )}
+                  >
+                    <Icon className="size-3.5 shrink-0" />
+                    <span>{label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
 
-          <TabsContent value="log">
-            <LogForm onLogged={() => setTab("history")} />
+          <TabsContent value="log" className="mt-0">
+            <LogForm onLogged={() => selectTab("history")} />
           </TabsContent>
-          <TabsContent value="history">
+          <TabsContent value="history" className="mt-0">
             <OffenseList />
           </TabsContent>
-          <TabsContent value="board">
+          <TabsContent value="board" className="mt-0">
             <ScoreboardPanel />
           </TabsContent>
-          <TabsContent value="case">
+          <TabsContent value="case" className="mt-0">
             <CaseFilePanel />
           </TabsContent>
-          <TabsContent value="sorry">
+          <TabsContent value="sorry" className="mt-0">
             <ApologiesPanel />
           </TabsContent>
-          <TabsContent value="rules">
+          <TabsContent value="rules" className="mt-0">
             <ConsequencesPanel />
           </TabsContent>
-          <TabsContent value="love">
+          <TabsContent value="love" className="mt-0">
             <CreditsPanel />
           </TabsContent>
-          <TabsContent value="quotes">
+          <TabsContent value="quotes" className="mt-0">
             <QuotesPanel />
           </TabsContent>
-          <TabsContent value="insights">
+          <TabsContent value="insights" className="mt-0">
             <Insights />
           </TabsContent>
-          <TabsContent value="fafo">
+          <TabsContent value="fafo" className="mt-0">
             <FafoReport />
           </TabsContent>
-          <TabsContent value="settings">
+          <TabsContent value="settings" className="mt-0">
             <SettingsPanel />
           </TabsContent>
         </Tabs>
 
-        <footer className="mt-10 pb-8 text-center text-xs text-fg-subtle">
-          Signed-in only · Shared household ledger · Both partners log & dispute · Central time
+        <footer className="mt-10 hidden text-center text-xs text-fg-subtle sm:block">
+          Private Household Ledgers · Invite Your Partner · Central Time
         </footer>
       </main>
 
+      {moreOpen ? (
+        <button
+          type="button"
+          className="fixed inset-x-0 top-0 z-40 bg-fg/35 sm:hidden"
+          style={{ bottom: "calc(var(--nav-h) + var(--safe-bottom))" }}
+          aria-label="Close Menu"
+          onClick={() => setMoreOpen(false)}
+        />
+      ) : null}
+
+      {moreOpen ? (
+        <div
+          id="more-sheet"
+          role="dialog"
+          aria-label="More Tabs"
+          className="fixed inset-x-0 z-50 mx-auto w-full max-w-4xl rounded-t-2xl border border-border bg-bg-elevated p-3 shadow-lg sm:hidden"
+          style={{ bottom: "calc(var(--nav-h) + var(--safe-bottom))" }}
+        >
+          <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-border-strong" aria-hidden />
+          <p className="mb-2 px-1 text-xs font-semibold tracking-wide text-fg-muted uppercase">
+            More
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            {MORE_TABS.map(({ id, label, icon: Icon }) => {
+              const active = tab === id;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => selectTab(id)}
+                  className={cn(
+                    "flex min-h-12 items-center gap-2.5 rounded-xl border px-3 py-2.5 text-left text-sm font-medium transition-colors touch-manipulation",
+                    active
+                      ? "border-primary bg-primary-soft text-primary"
+                      : "border-border bg-bg text-fg active:bg-bg-subtle",
+                  )}
+                >
+                  <Icon className="size-4 shrink-0" />
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+
+      <nav
+        className="fixed inset-x-0 bottom-0 z-[60] border-t border-border bg-bg-elevated/95 backdrop-blur-md sm:hidden"
+        style={{ paddingBottom: "var(--safe-bottom)" }}
+        aria-label="Primary"
+      >
+        <div className="mx-auto grid w-full max-w-4xl grid-cols-5 px-1 pt-1">
+          {PRIMARY_TABS.map(({ id, label, icon: Icon }) => {
+            const active = tab === id;
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => selectTab(id)}
+                className={cn(
+                  "flex min-h-14 flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1.5 text-[10px] font-semibold transition-colors touch-manipulation",
+                  active ? "text-primary" : "text-fg-muted active:bg-bg-subtle",
+                )}
+              >
+                <Icon className={cn("size-5", active && "stroke-[2.25]")} aria-hidden />
+                <span>{label}</span>
+              </button>
+            );
+          })}
+          <button
+            type="button"
+            onClick={() => setMoreOpen((v) => !v)}
+            className={cn(
+              "flex min-h-14 flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1.5 text-[10px] font-semibold transition-colors touch-manipulation",
+              moreActive || moreOpen ? "text-primary" : "text-fg-muted active:bg-bg-subtle",
+            )}
+            aria-expanded={moreOpen}
+            aria-controls="more-sheet"
+          >
+            <MoreHorizontal className="size-5" aria-hidden />
+            <span>More</span>
+          </button>
+        </div>
+      </nav>
+
       <Toaster
         position="bottom-center"
+        mobileOffset={80}
         toastOptions={{
           className: "border border-border bg-bg-elevated text-fg shadow-md",
         }}
@@ -230,10 +392,10 @@ export function AppShell() {
 
       <style>{`
         @media print {
-          header a, .print\\:hidden, [data-created-with-grok-banner],
-          [role="tablist"] { display: none !important; }
+          header, nav, [data-created-with-grok-banner],
+          #more-sheet { display: none !important; }
           body { background: white; }
-          main { max-width: 100%; padding: 0; }
+          main { max-width: 100%; padding: 0 !important; }
         }
       `}</style>
     </div>

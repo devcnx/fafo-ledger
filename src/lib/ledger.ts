@@ -1,7 +1,12 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { authMiddleware } from "@/lib/auth/middleware";
-import { HOUSEHOLD, type AppRole } from "@/lib/roles";
+import { STARTER_TEMPLATES } from "@/lib/constants";
+import {
+  LEGACY_HOUSEHOLD,
+  type AppRole,
+  type HouseholdMode,
+} from "@/lib/roles";
 import type {
   Apology,
   AppNotification,
@@ -39,9 +44,15 @@ export type Dispute = {
 };
 
 export type LedgerSnapshot = {
-  role: AppRole;
+  needsOnboarding: boolean;
+  role: AppRole | null;
   email: string;
   displayName: string;
+  householdId: string | null;
+  householdName: string | null;
+  householdMode: HouseholdMode | null;
+  inviteCode: string | null;
+  isOwner: boolean;
   profile: Profile;
   settings: AppSettings;
   offenses: Offense[];
@@ -93,29 +104,92 @@ function parseJsonObject<T extends object>(raw: unknown, fallback: T): T {
   }
 }
 
-function otherEmail(role: AppRole): string {
-  return role === "tracker" ? HOUSEHOLD.subject.email : HOUSEHOLD.tracker.email;
-}
+type HouseholdWho = {
+  userId: string;
+  email: string;
+  role: AppRole;
+  displayName: string;
+  householdId: string;
+  householdName: string;
+  householdMode: HouseholdMode;
+  inviteCode: string | null;
+  isOwner: boolean;
+};
 
-async function requireHousehold(userId: string) {
+async function loadUser(userId: string) {
   const { getSql } = await import("@/lib/db");
-  const { isAllowedEmail, roleForEmail, displayNameForEmail } = await import("@/lib/roles");
   const sql = await getSql();
   const rows = await sql<{ email: string; name: string }>`
     select email, name from "user" where id = ${userId} limit 1
   `;
-  const email = rows[0]?.email?.toLowerCase() ?? "";
-  if (!isAllowedEmail(email)) {
-    throw new Error("This account is not authorized for the FAFO ledger.");
-  }
-  const role = roleForEmail(email)!;
+  if (!rows[0]) throw new Error("Account Not Found.");
   return {
-    userId,
-    email,
-    role,
-    displayName: displayNameForEmail(email) ?? rows[0]?.name ?? email,
+    email: String(rows[0].email).toLowerCase(),
+    name: String(rows[0].name ?? ""),
   };
 }
+
+async function findMembership(userId: string, email: string) {
+  const { getSql } = await import("@/lib/db");
+  const sql = await getSql();
+  const byUser = await sql<Record<string, unknown>>`
+    select m.*, h.name as household_name, h.mode as household_mode, h.invite_code
+    from household_members m
+    join households h on h.id = m.household_id
+    where m.user_id = ${userId}
+    limit 1
+  `;
+  if (byUser[0]) return byUser[0];
+  const byEmail = await sql<Record<string, unknown>>`
+    select m.*, h.name as household_name, h.mode as household_mode, h.invite_code
+    from household_members m
+    join households h on h.id = m.household_id
+    where lower(m.email) = ${email.toLowerCase()}
+    limit 1
+  `;
+  if (byEmail[0]) {
+    await sql`
+      update household_members
+      set user_id = ${userId}
+      where id = ${String(byEmail[0].id)}
+        and (user_id is null or user_id = '')
+    `;
+    return byEmail[0];
+  }
+  return null;
+}
+
+async function requireHousehold(userId: string): Promise<HouseholdWho> {
+  const user = await loadUser(userId);
+  const mem = await findMembership(userId, user.email);
+  if (!mem) {
+    throw new Error("No household yet. Finish onboarding to create or join a ledger.");
+  }
+  return {
+    userId,
+    email: user.email,
+    role: String(mem.role) as AppRole,
+    displayName: String(mem.display_name || user.name || user.email),
+    householdId: String(mem.household_id),
+    householdName: String(mem.household_name || "Household Ledger"),
+    householdMode: String(mem.household_mode || "couple") as HouseholdMode,
+    inviteCode: mem.invite_code == null ? null : String(mem.invite_code),
+    isOwner: Number(mem.is_owner ?? 0) === 1,
+  };
+}
+
+async function partnerEmailInHousehold(householdId: string, myRole: AppRole) {
+  const { getSql } = await import("@/lib/db");
+  const sql = await getSql();
+  const other = myRole === "tracker" ? "subject" : "tracker";
+  const rows = await sql<{ email: string }>`
+    select email from household_members
+    where household_id = ${householdId} and role = ${other}
+    limit 1
+  `;
+  return rows[0]?.email?.toLowerCase() ?? "";
+}
+
 
 async function notify(
   sql: Awaited<ReturnType<typeof import("@/lib/db").getSql>>,
@@ -124,12 +198,24 @@ async function notify(
   body: string,
   kind = "info",
   href?: string,
+  householdId?: string,
 ) {
   await sql`
-    insert into notifications (id, user_email, title, body, kind, href, read, created_at)
-    values (${uid()}, ${userEmail.toLowerCase()}, ${title}, ${body}, ${kind}, ${href ?? null}, 0, ${new Date().toISOString()})
+    insert into notifications (id, user_email, title, body, kind, href, read, created_at, household_id)
+    values (
+      ${uid()},
+      ${userEmail.toLowerCase()},
+      ${title},
+      ${body},
+      ${kind},
+      ${href ?? null},
+      0,
+      ${new Date().toISOString()},
+      ${householdId ?? LEGACY_HOUSEHOLD.id}
+    )
   `;
 }
+
 
 function mapOffense(row: Record<string, unknown>): Offense {
   return {
@@ -280,11 +366,47 @@ export const getLedger = createServerFn({ method: "GET" })
     const { ensureSeedUsers } = await import("@/lib/seed.server");
     const { getSql } = await import("@/lib/db");
     await ensureSeedUsers();
+    const user = await loadUser(context.userId);
+    const mem = await findMembership(context.userId, user.email);
+    const emptyProfile: Profile = {
+      trackerName: user.name || "You",
+      subjectName: "Partner",
+      anniversary: "2025-06-16",
+      trackerBirthday: "2000-01-01",
+      subjectBirthday: "2000-01-01",
+      notes: "",
+    };
+    const emptySettings: AppSettings = { severityLabels: {}, purgeForgivenDays: 0 };
+    if (!mem) {
+      return {
+        needsOnboarding: true,
+        role: null,
+        email: user.email,
+        displayName: user.name || user.email,
+        householdId: null,
+        householdName: null,
+        householdMode: null,
+        inviteCode: null,
+        isOwner: false,
+        profile: emptyProfile,
+        settings: emptySettings,
+        offenses: [],
+        disputes: [],
+        apologies: [],
+        consequences: [],
+        credits: [],
+        quotes: [],
+        notifications: [],
+        templates: [],
+        categories: [],
+      };
+    }
     const who = await requireHousehold(context.userId);
     const sql = await getSql();
+    const hh = who.householdId;
 
     const profileRows = await sql<Record<string, unknown>>`
-      select * from ledger_profile where id = 'default' limit 1
+      select * from ledger_profile where id = ${hh} limit 1
     `;
     const p = profileRows[0];
     const profile: Profile = p
@@ -296,17 +418,10 @@ export const getLedger = createServerFn({ method: "GET" })
           subjectBirthday: asDateOnly(p.subject_birthday, "1986-12-01"),
           notes: String(p.notes ?? ""),
         }
-      : {
-          trackerName: "Brittaney Perry-Morgan",
-          subjectName: "Michael Lucido",
-          anniversary: "2025-06-16",
-          trackerBirthday: "1989-02-18",
-          subjectBirthday: "1986-12-01",
-          notes: "",
-        };
+      : emptyProfile;
 
     const settingsRows = await sql<Record<string, unknown>>`
-      select * from ledger_settings where id = 'default' limit 1
+      select * from ledger_settings where id = ${hh} limit 1
     `;
     const srow = settingsRows[0];
     const settings: AppSettings = {
@@ -325,26 +440,32 @@ export const getLedger = createServerFn({ method: "GET" })
       templateRows,
       catRows,
     ] = await Promise.all([
-      sql<Record<string, unknown>>`select * from offenses order by date desc`,
-      sql<Record<string, unknown>>`select * from disputes order by created_at desc`,
-      sql<Record<string, unknown>>`select * from apologies order by created_at desc`,
-      sql<Record<string, unknown>>`select * from consequences order by created_at desc`,
-      sql<Record<string, unknown>>`select * from credits order by date desc`,
-      sql<Record<string, unknown>>`select * from quotes order by pinned desc, created_at desc`,
+      sql<Record<string, unknown>>`select * from offenses where household_id = ${hh} order by date desc`,
+      sql<Record<string, unknown>>`select * from disputes where household_id = ${hh} order by created_at desc`,
+      sql<Record<string, unknown>>`select * from apologies where household_id = ${hh} order by created_at desc`,
+      sql<Record<string, unknown>>`select * from consequences where household_id = ${hh} order by created_at desc`,
+      sql<Record<string, unknown>>`select * from credits where household_id = ${hh} order by date desc`,
+      sql<Record<string, unknown>>`select * from quotes where household_id = ${hh} order by pinned desc, created_at desc`,
       sql<Record<string, unknown>>`
         select * from notifications
-        where lower(user_email) = ${who.email}
+        where household_id = ${hh} and lower(user_email) = ${who.email}
         order by created_at desc
         limit 50
       `,
-      sql<Record<string, unknown>>`select * from offense_templates order by title`,
-      sql<{ name: string }>`select name from custom_categories order by name`,
+      sql<Record<string, unknown>>`select * from offense_templates where household_id = ${hh} order by title`,
+      sql<{ name: string }>`select name from custom_categories where household_id = ${hh} order by name`,
     ]);
 
     return {
+      needsOnboarding: false,
       role: who.role,
       email: who.email,
       displayName: who.displayName,
+      householdId: who.householdId,
+      householdName: who.householdName,
+      householdMode: who.householdMode,
+      inviteCode: who.inviteCode,
+      isOwner: who.isOwner,
       profile,
       settings,
       offenses: offenseRows.map(mapOffense),
@@ -393,7 +514,8 @@ export const addOffense = createServerFn({ method: "POST" })
       insert into offenses (
         id, date, severity, category, title, description, impact, status,
         created_by, created_at, updated_at,
-        author_role, against_role, author_email, moods, contexts, evidence, remorse, archived
+        author_role, against_role, author_email, moods, contexts, evidence, remorse, archived,
+        household_id
       ) values (
         ${id},
         ${data.date},
@@ -413,25 +535,29 @@ export const addOffense = createServerFn({ method: "POST" })
         ${JSON.stringify(data.contexts ?? [])},
         ${JSON.stringify(data.evidence ?? [])},
         ${data.remorse ?? null},
-        0
+        0,
+        ${who.householdId}
       )
     `;
     if (data.category.trim()) {
       await sql`
-        insert into custom_categories (name) values (${data.category.trim()})
-        on conflict (name) do nothing
+        insert into custom_categories (household_id, name)
+        values (${who.householdId}, ${data.category.trim()})
+        on conflict (household_id, name) do nothing
       `;
     }
-    const targetEmail =
-      againstRole === "tracker" ? HOUSEHOLD.tracker.email : HOUSEHOLD.subject.email;
-    await notify(
-      sql,
-      targetEmail,
-      "New offense logged",
-      `${who.displayName} logged: ${data.title.trim()}`,
-      "offense",
-      "history",
-    );
+    const targetEmail = await partnerEmailInHousehold(who.householdId, who.role);
+    if (targetEmail) {
+      await notify(
+        sql,
+        targetEmail,
+        "New Offense Logged",
+        `${who.displayName} logged: ${data.title.trim()}`,
+        "offense",
+        "history",
+        who.householdId,
+      );
+    }
     return { id };
   });
 
@@ -461,7 +587,7 @@ export const updateOffense = createServerFn({ method: "POST" })
     const who = await requireHousehold(context.userId);
     const sql = await getSql();
     const rows = await sql<Record<string, unknown>>`
-      select * from offenses where id = ${data.id} limit 1
+      select * from offenses where id = ${data.id} and household_id = ${who.householdId} limit 1
     `;
     if (!rows[0]) throw new Error("Offense not found.");
     const cur = rows[0];
@@ -520,7 +646,7 @@ export const deleteOffense = createServerFn({ method: "POST" })
     const who = await requireHousehold(context.userId);
     const sql = await getSql();
     const rows = await sql<Record<string, unknown>>`
-      select * from offenses where id = ${data.id} limit 1
+      select * from offenses where id = ${data.id} and household_id = ${who.householdId} limit 1
     `;
     if (!rows[0]) throw new Error("Offense not found.");
     const cur = rows[0];
@@ -530,7 +656,7 @@ export const deleteOffense = createServerFn({ method: "POST" })
     if (!isAuthor && who.role !== "tracker") {
       throw new Error("You can only delete your own entries.");
     }
-    await sql`delete from offenses where id = ${data.id}`;
+    await sql`delete from offenses where id = ${data.id} and household_id = ${who.householdId}`;
     return { ok: true };
   });
 
@@ -545,7 +671,7 @@ export const clearOffenses = createServerFn({ method: "POST" })
     const sql = await getSql();
     await sql`delete from disputes`;
     await sql`delete from apologies`;
-    await sql`delete from offenses`;
+    await sql`delete from offenses where household_id = ${who.householdId}`;
     return { ok: true };
   });
 
@@ -566,14 +692,14 @@ export const updateProfile = createServerFn({ method: "POST" })
     const { getSql } = await import("@/lib/db");
     await ensureSeedUsers();
     const who = await requireHousehold(context.userId);
-    if (who.role !== "tracker") throw new Error("Only Brittaney can edit the profile.");
+    if (!who.isOwner && who.role !== "tracker") throw new Error("Only the household owner can edit the profile.");
     const sql = await getSql();
     const now = new Date().toISOString();
     await sql`
       insert into ledger_profile (
         id, tracker_name, subject_name, anniversary, tracker_birthday, subject_birthday, notes, updated_at
       ) values (
-        'default',
+        ${who.householdId},
         ${data.trackerName.trim()},
         ${data.subjectName.trim()},
         ${asDateOnly(data.anniversary, "2025-06-16")},
@@ -607,10 +733,10 @@ export const updateSettings = createServerFn({ method: "POST" })
     const { getSql } = await import("@/lib/db");
     await ensureSeedUsers();
     const who = await requireHousehold(context.userId);
-    if (who.role !== "tracker") throw new Error("Only Brittaney can change severity labels.");
+    if (!who.isOwner && who.role !== "tracker") throw new Error("Only the household owner can change severity labels.");
     const sql = await getSql();
     const rows = await sql<Record<string, unknown>>`
-      select * from ledger_settings where id = 'default' limit 1
+      select * from ledger_settings where id = ${who.householdId} limit 1
     `;
     const cur = rows[0] ?? {};
     const labels = data.severityLabels
@@ -623,7 +749,7 @@ export const updateSettings = createServerFn({ method: "POST" })
     const now = new Date().toISOString();
     await sql`
       insert into ledger_settings (id, severity_labels, purge_forgiven_days, updated_at)
-      values ('default', ${labels}, ${purge}, ${now})
+      values (${who.householdId}, ${labels}, ${purge}, ${now})
       on conflict (id) do update set
         severity_labels = excluded.severity_labels,
         purge_forgiven_days = excluded.purge_forgiven_days,
@@ -639,17 +765,18 @@ export const purgeForgiven = createServerFn({ method: "POST" })
     const { getSql } = await import("@/lib/db");
     await ensureSeedUsers();
     const who = await requireHousehold(context.userId);
-    if (who.role !== "tracker") throw new Error("Only Brittaney can purge.");
+    if (!who.isOwner && who.role !== "tracker") throw new Error("Only the household owner can purge.");
     const sql = await getSql();
     const s = await sql<{ purge_forgiven_days: number }>`
-      select purge_forgiven_days from ledger_settings where id = 'default' limit 1
+      select purge_forgiven_days from ledger_settings where id = ${who.householdId} limit 1
     `;
     const days = Number(s[0]?.purge_forgiven_days ?? 0);
     if (days <= 0) throw new Error("Set purge days in settings first (greater than 0).");
     const cutoff = new Date(Date.now() - days * 86400000).toISOString();
     await sql`
       delete from offenses
-      where status = 'forgiven' and updated_at < ${cutoff}
+      where household_id = ${who.householdId}
+        and status = 'forgiven' and updated_at < ${cutoff}
     `;
     return { ok: true, purgedBefore: cutoff };
   });
@@ -671,7 +798,7 @@ export const submitDispute = createServerFn({ method: "POST" })
     const who = await requireHousehold(context.userId);
     const sql = await getSql();
     const offense = await sql<Record<string, unknown>>`
-      select * from offenses where id = ${data.offenseId} limit 1
+      select * from offenses where id = ${data.offenseId} and household_id = ${who.householdId} limit 1
     `;
     if (!offense[0]) throw new Error("Offense not found.");
     const authorEmail = String(offense[0].author_email ?? "").toLowerCase();
@@ -683,7 +810,7 @@ export const submitDispute = createServerFn({ method: "POST" })
     const now = new Date().toISOString();
     await sql`
       insert into disputes (
-        id, offense_id, author_id, author_email, author_role, kind, body, status, evidence, created_at, updated_at
+        id, offense_id, author_id, author_email, author_role, kind, body, status, evidence, created_at, updated_at, household_id
       ) values (
         ${id},
         ${data.offenseId},
@@ -695,13 +822,14 @@ export const submitDispute = createServerFn({ method: "POST" })
         'pending',
         ${JSON.stringify(data.evidence ?? [])},
         ${now},
-        ${now}
+        ${now},
+        ${who.householdId}
       )
     `;
     await notify(
       sql,
-      authorEmail || otherEmail(who.role),
-      "New dispute filed",
+      authorEmail || await partnerEmailInHousehold(who.householdId, who.role),
+      "New Dispute Filed",
       `${who.displayName} disputed: ${String(offense[0].title)}`,
       "dispute",
       "history",
@@ -765,6 +893,7 @@ export const resolveDispute = createServerFn({ method: "POST" })
       `Ruling on “${String(rows[0].offense_title)}”: ${data.status}.`,
       "dispute",
       "history",
+      who.householdId,
     );
     return { ok: true };
   });
@@ -816,7 +945,7 @@ export const submitApology = createServerFn({ method: "POST" })
     const now = new Date().toISOString();
     await sql`
       insert into apologies (
-        id, offense_id, author_id, author_role, author_email, body, remorse, status, created_at, updated_at
+        id, offense_id, author_id, author_role, author_email, body, remorse, status, created_at, updated_at, household_id
       ) values (
         ${id},
         ${data.offenseId ?? null},
@@ -827,7 +956,8 @@ export const submitApology = createServerFn({ method: "POST" })
         ${data.remorse},
         'pending',
         ${now},
-        ${now}
+        ${now},
+        ${who.householdId}
       )
     `;
     if (data.offenseId && data.remorse) {
@@ -838,8 +968,8 @@ export const submitApology = createServerFn({ method: "POST" })
     }
     await notify(
       sql,
-      otherEmail(who.role),
-      "Apology submitted",
+      await partnerEmailInHousehold(who.householdId, who.role),
+      "Apology Submitted",
       `${who.displayName} apologized (remorse ${data.remorse}/5).`,
       "apology",
       "apologies",
@@ -896,6 +1026,7 @@ export const resolveApology = createServerFn({ method: "POST" })
       data.response?.trim() || `Your apology was ${data.status}.`,
       "apology",
       "apologies",
+      who.householdId,
     );
     return { ok: true };
   });
@@ -924,7 +1055,7 @@ export const addConsequence = createServerFn({ method: "POST" })
     await sql`
       insert into consequences (
         id, title, description, trigger_rule, status, created_by_role, created_by_email,
-        assigned_to_role, due_date, created_at, updated_at
+        assigned_to_role, due_date, created_at, updated_at, household_id
       ) values (
         ${id},
         ${data.title.trim()},
@@ -936,13 +1067,14 @@ export const addConsequence = createServerFn({ method: "POST" })
         ${data.assignedToRole},
         ${data.dueDate ?? null},
         ${now},
-        ${now}
+        ${now},
+        ${who.householdId}
       )
     `;
     await notify(
       sql,
-      otherEmail(who.role),
-      "New consequence on the board",
+      await partnerEmailInHousehold(who.householdId, who.role),
+      "New Consequence On The Board",
       data.title.trim(),
       "consequence",
       "consequences",
@@ -1026,7 +1158,7 @@ export const addCredit = createServerFn({ method: "POST" })
     const now = new Date().toISOString();
     await sql`
       insert into credits (
-        id, date, title, description, author_role, author_email, about_role, status, created_at, updated_at
+        id, date, title, description, author_role, author_email, about_role, status, created_at, updated_at, household_id
       ) values (
         ${id},
         ${data.date},
@@ -1037,12 +1169,13 @@ export const addCredit = createServerFn({ method: "POST" })
         ${data.aboutRole},
         'pending',
         ${now},
-        ${now}
+        ${now},
+        ${who.householdId}
       )
     `;
     await notify(
       sql,
-      otherEmail(who.role),
+      await partnerEmailInHousehold(who.householdId, who.role),
       "Good deed logged",
       data.title.trim(),
       "credit",
@@ -1106,7 +1239,7 @@ export const addQuote = createServerFn({ method: "POST" })
     const sql = await getSql();
     const id = uid();
     await sql`
-      insert into quotes (id, quote_text, said_by_role, context, pinned, author_role, author_email, created_at)
+      insert into quotes (id, quote_text, said_by_role, context, pinned, author_role, author_email, created_at, household_id)
       values (
         ${id},
         ${data.quoteText.trim()},
@@ -1200,16 +1333,18 @@ export const saveTemplate = createServerFn({ method: "POST" })
     const id = data.id ?? uid();
     const now = new Date().toISOString();
     await sql`
-      insert into offense_templates (id, title, category, severity, description, impact, owner_role, created_at)
+      insert into offense_templates (id, household_id, title, category, severity, description, impact, owner_role, created_at)
       values (
         ${id},
+        ${who.householdId},
         ${data.title.trim()},
         ${data.category.trim()},
         ${data.severity},
         ${(data.description ?? "").trim()},
         ${(data.impact ?? "").trim()},
         ${who.role},
-        ${now}
+        ${now},
+        ${who.householdId}
       )
       on conflict (id) do update set
         title = excluded.title,
@@ -1239,3 +1374,204 @@ export const bootstrapLedger = createServerFn({ method: "POST" }).handler(async 
   await ensureSeedUsers();
   return { ok: true };
 });
+
+
+function inviteCode() {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let out = "";
+  for (let i = 0; i < 8; i++) out += alphabet[Math.floor(Math.random() * alphabet.length)];
+  return out;
+}
+
+const createHouseholdInput = z.object({
+  mode: z.enum(["solo", "couple"]),
+  yourName: z.string().min(1).max(120),
+  partnerName: z.string().min(1).max(120),
+  anniversary: z.string().optional(),
+  yourBirthday: z.string().optional(),
+  partnerBirthday: z.string().optional(),
+  yourRole: z.enum(["tracker", "subject"]).optional(),
+});
+
+export const createHousehold = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((data: unknown) => createHouseholdInput.parse(data))
+  .handler(async ({ context, data }) => {
+    const { ensureSeedUsers } = await import("@/lib/seed.server");
+    const { getSql } = await import("@/lib/db");
+    await ensureSeedUsers();
+    const user = await loadUser(context.userId);
+    if (await findMembership(context.userId, user.email)) {
+      throw new Error("You Already Belong To A Household Ledger.");
+    }
+    const sql = await getSql();
+    const hh = `hh-${uid()}`;
+    const code = inviteCode();
+    const trackerName = data.yourRole === "subject" ? data.partnerName.trim() : data.yourName.trim();
+    const subjectName = data.yourRole === "subject" ? data.yourName.trim() : data.partnerName.trim();
+    const myRole: AppRole = data.yourRole ?? "tracker";
+    const partnerRole: AppRole = myRole === "tracker" ? "subject" : "tracker";
+    const anniversary = asDateOnly(data.anniversary || "2025-06-16", "2025-06-16");
+    const yourBirthday = asDateOnly(data.yourBirthday || "2000-01-01", "2000-01-01");
+    const partnerBirthday = asDateOnly(data.partnerBirthday || "2000-01-01", "2000-01-01");
+    const trackerBirthday = myRole === "tracker" ? yourBirthday : partnerBirthday;
+    const subjectBirthday = myRole === "tracker" ? partnerBirthday : yourBirthday;
+
+    await sql`
+      insert into households (id, name, mode, invite_code, created_by_user_id)
+      values (
+        ${hh},
+        ${`${data.yourName.trim()} Ledger`},
+        ${data.mode},
+        ${code},
+        ${context.userId}
+      )
+    `;
+    await sql`
+      insert into household_members (
+        id, household_id, user_id, email, display_name, role, is_owner
+      ) values (
+        ${`hm-${uid()}`},
+        ${hh},
+        ${context.userId},
+        ${user.email},
+        ${data.yourName.trim()},
+        ${myRole},
+        1
+      )
+    `;
+    // Placeholder partner seat so invite can claim it
+    await sql`
+      insert into household_members (
+        id, household_id, user_id, email, display_name, role, is_owner
+      ) values (
+        ${`hm-${uid()}`},
+        ${hh},
+        null,
+        ${`pending+${code.toLowerCase()}@fafo.local`},
+        ${data.partnerName.trim()},
+        ${partnerRole},
+        0
+      )
+    `;
+    await sql`
+      insert into ledger_profile (
+        id, tracker_name, subject_name, anniversary, tracker_birthday, subject_birthday, notes
+      ) values (
+        ${hh},
+        ${trackerName},
+        ${subjectName},
+        ${anniversary},
+        ${trackerBirthday},
+        ${subjectBirthday},
+        ${""}
+      )
+    `;
+    await sql`
+      insert into ledger_settings (id, severity_labels, purge_forgiven_days)
+      values (${hh}, '{}', 0)
+    `;
+    for (const tpl of STARTER_TEMPLATES) {
+      await sql`
+        insert into offense_templates (
+          id, household_id, title, category, severity, description, impact, owner_role, created_at
+        ) values (
+          ${`${tpl.id}-${hh}`},
+          ${hh},
+          ${tpl.title},
+          ${tpl.category},
+          ${tpl.severity},
+          ${tpl.description},
+          ${tpl.impact},
+          ${"both"},
+          ${new Date().toISOString()}
+        )
+        on conflict (id) do nothing
+      `;
+    }
+    return { householdId: hh, inviteCode: code, mode: data.mode };
+  });
+
+const joinHouseholdInput = z.object({
+  inviteCode: z.string().min(4).max(32),
+  displayName: z.string().min(1).max(120).optional(),
+});
+
+export const joinHousehold = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((data: unknown) => joinHouseholdInput.parse(data))
+  .handler(async ({ context, data }) => {
+    const { ensureSeedUsers } = await import("@/lib/seed.server");
+    const { getSql } = await import("@/lib/db");
+    await ensureSeedUsers();
+    const user = await loadUser(context.userId);
+    if (await findMembership(context.userId, user.email)) {
+      throw new Error("You Already Belong To A Household Ledger.");
+    }
+    const sql = await getSql();
+    const code = data.inviteCode.trim().toUpperCase();
+    const hhRows = await sql<Record<string, unknown>>`
+      select * from households where upper(invite_code) = ${code} limit 1
+    `;
+    if (!hhRows[0]) throw new Error("Invalid Invite Code.");
+    const hh = String(hhRows[0].id);
+    const seats = await sql<Record<string, unknown>>`
+      select * from household_members
+      where household_id = ${hh} and (user_id is null or user_id = '')
+      order by is_owner asc
+      limit 1
+    `;
+    const display = (data.displayName || user.name || user.email).trim();
+    if (seats[0]) {
+      await sql`
+        update household_members
+        set user_id = ${context.userId},
+            email = ${user.email},
+            display_name = ${display}
+        where id = ${String(seats[0].id)}
+      `;
+    } else {
+      await sql`
+        insert into household_members (
+          id, household_id, user_id, email, display_name, role, is_owner
+        ) values (
+          ${`hm-${uid()}`},
+          ${hh},
+          ${context.userId},
+          ${user.email},
+          ${display},
+          ${"subject"},
+          0
+        )
+      `;
+    }
+    // Couple mode if second real member joined
+    await sql`
+      update households set mode = 'couple' where id = ${hh} and mode = 'solo'
+    `;
+    return { householdId: hh, ok: true };
+  });
+
+export const regenerateInviteCode = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    const { ensureSeedUsers } = await import("@/lib/seed.server");
+    const { getSql } = await import("@/lib/db");
+    await ensureSeedUsers();
+    const who = await requireHousehold(context.userId);
+    if (!who.isOwner) throw new Error("Only The Household Owner Can Refresh The Invite Code.");
+    const sql = await getSql();
+    const code = inviteCode();
+    await sql`
+      update households set invite_code = ${code} where id = ${who.householdId}
+    `;
+    // keep pending seat email in sync if present
+    await sql`
+      update household_members
+      set email = ${`pending+${code.toLowerCase()}@fafo.local`}
+      where household_id = ${who.householdId}
+        and (user_id is null or user_id = '')
+        and email like 'pending+%@fafo.local'
+    `;
+    return { inviteCode: code };
+  });

@@ -10,10 +10,10 @@ export const DEFAULT_PROFILE: Profile = {
 };
 
 export const DEFAULT_SEVERITY_LABELS: Record<Severity, string> = {
-  1: "Mildly annoying",
+  1: "Mildly Annoying",
   2: "Annoying",
-  3: "Pisses me off",
-  4: "Makes me want to slap them",
+  3: "Pisses Me Off",
+  4: "Makes Me Want To Slap Them",
   5: "Nuclear",
 };
 
@@ -34,16 +34,16 @@ export function severityLabel(level: Severity, custom?: SeverityLabels): string 
 
 export const DEFAULT_CATEGORIES = [
   "Communication",
-  "Chores & mess",
+  "Chores & Mess",
   "Respect",
-  "Time & flaking",
+  "Time & Flaking",
   "Hygiene",
   "Driving",
   "Money",
-  "Family / friends",
-  "Tech & phones",
-  "Intimacy / affection",
-  "Lying / omission",
+  "Family / Friends",
+  "Tech & Phones",
+  "Intimacy / Affection",
+  "Lying / Omission",
   "Other",
 ] as const;
 
@@ -55,24 +55,68 @@ export const MOOD_OPTIONS = [
   "Sad",
   "Angry",
   "Overwhelmed",
-  "Fine otherwise",
+  "Fine Otherwise",
 ] as const;
 
 export const CONTEXT_OPTIONS = [
-  "Work day",
+  "Work Day",
   "Weekend",
   "Morning",
   "Night",
-  "In public",
-  "At home",
-  "Family around",
-  "After drinking",
+  "In Public",
+  "At Home",
+  "Family Around",
+  "After Drinking",
   "Travel",
   "Holiday",
 ] as const;
 
+/** Starter offense templates (Title Case) — used for new households + DB repair. */
+export const STARTER_TEMPLATES = [
+  {
+    id: "tpl-dishes",
+    title: "Left Dishes In The Sink Again",
+    category: "Chores & Mess",
+    severity: 2 as Severity,
+    description: "Dishes Left Overnight.",
+    impact: "I Have To Clean Up After You.",
+  },
+  {
+    id: "tpl-late",
+    title: "Late Without A Text",
+    category: "Time & Flaking",
+    severity: 3 as Severity,
+    description: "Showed Up Late With No Heads-Up.",
+    impact: "Felt Disrespected And Anxious.",
+  },
+  {
+    id: "tpl-phone",
+    title: "Phone During Quality Time",
+    category: "Tech & Phones",
+    severity: 2 as Severity,
+    description: "Scrolled Through The Phone While We Were Talking.",
+    impact: "Felt Ignored.",
+  },
+  {
+    id: "tpl-tone",
+    title: "Tone / Attitude",
+    category: "Respect",
+    severity: 3 as Severity,
+    description: "Snapped Or Used A Tone That Crossed A Line.",
+    impact: "Felt Small / Angry.",
+  },
+  {
+    id: "tpl-lie",
+    title: "Lied Or Omitted Something",
+    category: "Lying / Omission",
+    severity: 4 as Severity,
+    description: "Was Not Fully Honest.",
+    impact: "Trust Took A Hit.",
+  },
+] as const;
+
 export const APP_NAME = "FAFO Ledger";
-export const APP_TAGLINE = "Fuck around and find out — with receipts.";
+export const APP_TAGLINE = "Fuck Around And Find Out — With Receipts.";
 
 export const PIN_STORAGE_KEY = "fafo-pin-hash-v1";
 export const THEME_STORAGE_KEY = "fafo-theme-v1";

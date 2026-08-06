@@ -104,9 +104,9 @@ on conflict (id) do nothing;
 
 insert into offense_templates (id, title, category, severity, description, impact, owner_role)
 values
-  ('tpl-dishes', 'Left dishes in the sink again', 'Chores & mess', 2, 'Dishes left overnight.', 'I have to clean up after you.', 'both'),
-  ('tpl-late', 'Late without a text', 'Time & flaking', 3, 'Showed up late with no heads-up.', 'Felt disrespected and anxious.', 'both'),
-  ('tpl-phone', 'Phone during quality time', 'Tech & phones', 2, 'Scrolled through the phone while we were talking.', 'Felt ignored.', 'both'),
-  ('tpl-tone', 'Tone / attitude', 'Respect', 3, 'Snapped or used a tone that crossed a line.', 'Felt small / angry.', 'both'),
-  ('tpl-lie', 'Lied or omitted something', 'Lying / omission', 4, 'Was not fully honest.', 'Trust took a hit.', 'both')
+  ('tpl-dishes', 'Left Dishes In The Sink Again', 'Chores & Mess', 2, 'Dishes Left Overnight.', 'I Have To Clean Up After You.', 'both'),
+  ('tpl-late', 'Late Without A Text', 'Time & Flaking', 3, 'Showed Up Late With No Heads-Up.', 'Felt Disrespected And Anxious.', 'both'),
+  ('tpl-phone', 'Phone During Quality Time', 'Tech & Phones', 2, 'Scrolled Through The Phone While We Were Talking.', 'Felt Ignored.', 'both'),
+  ('tpl-tone', 'Tone / Attitude', 'Respect', 3, 'Snapped Or Used A Tone That Crossed A Line.', 'Felt Small / Angry.', 'both'),
+  ('tpl-lie', 'Lied Or Omitted Something', 'Lying / Omission', 4, 'Was Not Fully Honest.', 'Trust Took A Hit.', 'both')
 on conflict (id) do nothing;

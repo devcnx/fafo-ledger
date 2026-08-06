@@ -14,12 +14,12 @@ export function ScoreboardPanel() {
   const countdowns = [
     { label: "Anniversary", days: daysUntilNext(profile.anniversary), date: profile.anniversary },
     {
-      label: `${profile.trackerName.split(" ")[0]}'s birthday`,
+      label: `${profile.trackerName.split(" ")[0]}'s Birthday`,
       days: daysUntilNext(profile.trackerBirthday),
       date: profile.trackerBirthday,
     },
     {
-      label: `${profile.subjectName.split(" ")[0]}'s birthday`,
+      label: `${profile.subjectName.split(" ")[0]}'s Birthday`,
       days: daysUntilNext(profile.subjectBirthday),
       date: profile.subjectBirthday,
     },
@@ -28,23 +28,23 @@ export function ScoreboardPanel() {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <Stat label="Open vs you" value={String(board.openAgainst)} />
-        <Stat label="Peace streak" value={board.peaceStreak === null ? "∞" : String(board.peaceStreak)} />
+        <Stat label="Open vs You" value={String(board.openAgainst)} />
+        <Stat label="Peace Streak" value={board.peaceStreak === null ? "∞" : String(board.peaceStreak)} />
         <Stat
-          label="Dispute win %"
+          label="Dispute Win %"
           value={board.disputeWinRate === null ? "—" : `${board.disputeWinRate}%`}
         />
-        <Stat label="Credits earned" value={String(board.creditsAccepted)} />
-        <Stat label="You logged" value={String(board.loggedByMe)} />
-        <Stat label="Forgiven vs you" value={String(board.forgivenAgainst)} />
-        <Stat label="Disputes pending" value={String(board.disputePending)} />
-        <Stat label="Nuclear vs you" value={String(board.nuclear)} />
+        <Stat label="Credits Earned" value={String(board.creditsAccepted)} />
+        <Stat label="You Logged" value={String(board.loggedByMe)} />
+        <Stat label="Forgiven vs You" value={String(board.forgivenAgainst)} />
+        <Stat label="Disputes Pending" value={String(board.disputePending)} />
+        <Stat label="Nuclear vs You" value={String(board.nuclear)} />
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Don’t mess this up</CardTitle>
-          <CardDescription>Countdowns (Central calendar).</CardDescription>
+          <CardTitle>{"Don't Mess This Up"}</CardTitle>
+          <CardDescription>Countdowns (Central Calendar).</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-2 sm:grid-cols-3">
           {countdowns.map((c) => (
@@ -61,8 +61,8 @@ export function ScoreboardPanel() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Peace heat map</CardTitle>
-          <CardDescription>Last 12 weeks · darker = more offenses that day.</CardDescription>
+          <CardTitle>Peace Heat Map</CardTitle>
+          <CardDescription>Last 12 Weeks · Darker = More Offenses That Day.</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex flex-wrap gap-1">
@@ -95,8 +95,8 @@ export function ScoreboardPanel() {
       {warnings.length > 0 ? (
         <Card className="border-warn/30">
           <CardHeader>
-            <CardTitle className="text-warn">Pattern warnings</CardTitle>
-            <CardDescription>Auto flags from recent activity.</CardDescription>
+            <CardTitle className="text-warn">Pattern Warnings</CardTitle>
+            <CardDescription>Auto Flags from Recent Activity.</CardDescription>
           </CardHeader>
           <CardContent>
             <ul className="space-y-2">

@@ -6,7 +6,8 @@ export const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"in
     <input
       type={type}
       className={cn(
-        "flex h-10 w-full rounded-lg border border-border bg-bg-elevated px-3 py-2 text-sm text-fg shadow-sm transition-colors placeholder:text-fg-subtle focus-visible:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-50",
+        // text-base (16px) prevents iOS zoom; min-h-11 = 44px touch target
+        "flex min-h-11 h-11 w-full rounded-lg border border-border bg-bg-elevated px-3 py-2 text-base text-fg shadow-sm transition-colors placeholder:text-fg-subtle focus-visible:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-50 sm:text-sm",
         className,
       )}
       ref={ref}
@@ -20,7 +21,7 @@ export const Textarea = React.forwardRef<HTMLTextAreaElement, React.ComponentPro
   ({ className, ...props }, ref) => (
     <textarea
       className={cn(
-        "flex min-h-24 w-full rounded-lg border border-border bg-bg-elevated px-3 py-2 text-sm text-fg shadow-sm transition-colors placeholder:text-fg-subtle focus-visible:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-50",
+        "flex min-h-28 w-full rounded-lg border border-border bg-bg-elevated px-3 py-3 text-base text-fg shadow-sm transition-colors placeholder:text-fg-subtle focus-visible:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-24 sm:text-sm",
         className,
       )}
       ref={ref}

@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input, Label, Textarea } from "@/components/ui/input";
 import { DEFAULT_SEVERITY_LABELS, THEME_STORAGE_KEY } from "@/lib/constants";
 import { hashPin } from "@/lib/evidence";
+import { regenerateInviteCode } from "@/lib/ledger";
 import { useLedger } from "@/lib/ledger-context";
 import type { Severity, SeverityLabels } from "@/lib/types";
 import { centralTodayYmd, downloadText, formatDate } from "@/lib/utils";
@@ -30,6 +31,10 @@ export function SettingsPanel() {
     saveTemplate,
     deleteTemplate,
     categories,
+    inviteCode,
+    isOwner,
+    householdMode,
+    refresh,
   } = useLedger();
   const [draft, setDraft] = useState(profile);
   const [labels, setLabels] = useState<SeverityLabels>(settings.severityLabels);
@@ -67,15 +72,16 @@ export function SettingsPanel() {
     root.style.colorScheme = dark ? "dark" : "light";
   }
 
-  if (role !== "tracker") {
+  if (role !== "tracker" && !isOwner) {
     return (
       <div className="space-y-4">
         <ThemeCard theme={theme} applyTheme={applyTheme} />
         <PinCard pinA={pinA} pinB={pinB} setPinA={setPinA} setPinB={setPinB} />
+        <InviteCard inviteCode={inviteCode} canManage={false} onRefresh={refresh} />
         <Card>
           <CardContent className="py-10 text-center text-sm text-fg-muted">
-            Household profile, severity labels, and purge tools are Brittaney-only. You can still
-            use theme + PIN on this device.
+            Household Profile, Severity Labels, and Purge Tools Are Owner-Only. You Can Still Use
+            Theme + PIN on This Device.
           </CardContent>
         </Card>
       </div>
@@ -86,9 +92,9 @@ export function SettingsPanel() {
     setSaving(true);
     try {
       await updateProfile(draft);
-      toast.success("Profile saved.");
+      toast.success("Profile Saved.");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Save failed");
+      toast.error(e instanceof Error ? e.message : "Save Failed");
     } finally {
       setSaving(false);
     }
@@ -97,9 +103,9 @@ export function SettingsPanel() {
   async function saveSettings() {
     try {
       await updateSettings({ severityLabels: labels, purgeForgivenDays: purgeDays });
-      toast.success("Settings saved.");
+      toast.success("Settings Saved.");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Save failed");
+      toast.error(e instanceof Error ? e.message : "Save Failed");
     }
   }
 
@@ -122,7 +128,7 @@ export function SettingsPanel() {
       JSON.stringify(data, null, 2),
       "application/json",
     );
-    toast.success("Backup downloaded.");
+    toast.success("Backup Downloaded.");
   }
 
   function handleExportCsv() {
@@ -154,21 +160,21 @@ export function SettingsPanel() {
     ];
     const csv = rows.map((r) => r.map((cell) => `"${cell}"`).join(",")).join("\n");
     downloadText(`fafo-ledger-${centralTodayYmd()}.csv`, csv, "text/csv");
-    toast.success("CSV downloaded.");
+    toast.success("CSV Downloaded.");
   }
 
   async function handleClear() {
     if (offenses.length === 0) {
-      toast.message("Nothing to clear.");
+      toast.message("Nothing to Clear.");
       return;
     }
-    if (!confirm(`Delete all ${offenses.length} offenses and disputes? This cannot be undone.`))
+    if (!confirm(`Delete All ${offenses.length} Offenses and Disputes? This Cannot Be Undone.`))
       return;
     try {
       await clearOffenses();
-      toast.success("Ledger wiped.");
+      toast.success("Ledger Wiped.");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Clear failed");
+      toast.error(e instanceof Error ? e.message : "Clear Failed");
     }
   }
 
@@ -177,17 +183,18 @@ export function SettingsPanel() {
       <ThemeCard theme={theme} applyTheme={applyTheme} />
       <PinCard pinA={pinA} pinB={pinB} setPinA={setPinA} setPinB={setPinB} />
 
+      <InviteCard inviteCode={inviteCode} canManage mode={householdMode} onRefresh={refresh} />
       <Card>
         <CardHeader>
-          <CardTitle>Relationship profile</CardTitle>
+          <CardTitle>Relationship Profile</CardTitle>
           <CardDescription>
-            Names and calendar dates (Central). No timezone shift on anniversaries/birthdays.
+            Names and Calendar Dates (Central). No Timezone Shift on Anniversaries/Birthdays.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <Label htmlFor="tracker">Your name</Label>
+              <Label htmlFor="tracker">Your Name</Label>
               <Input
                 id="tracker"
                 value={draft.trackerName}
@@ -195,7 +202,7 @@ export function SettingsPanel() {
               />
             </div>
             <div>
-              <Label htmlFor="subject">His name</Label>
+              <Label htmlFor="subject">Partner Name</Label>
               <Input
                 id="subject"
                 value={draft.subjectName}
@@ -211,11 +218,11 @@ export function SettingsPanel() {
                 onChange={(e) => setDraft({ ...draft, anniversary: e.target.value })}
               />
               <p className="mt-1 text-xs text-fg-subtle">
-                Displays as {formatDate(draft.anniversary || "2025-06-16")}
+                Displays As {formatDate(draft.anniversary || "2025-06-16")}
               </p>
             </div>
             <div>
-              <Label htmlFor="tbday">Your birthday</Label>
+              <Label htmlFor="tbday">Your Birthday</Label>
               <Input
                 id="tbday"
                 type="date"
@@ -224,7 +231,7 @@ export function SettingsPanel() {
               />
             </div>
             <div>
-              <Label htmlFor="sbday">His birthday</Label>
+              <Label htmlFor="sbday">Partner Birthday</Label>
               <Input
                 id="sbday"
                 type="date"
@@ -234,7 +241,7 @@ export function SettingsPanel() {
             </div>
           </div>
           <div>
-            <Label htmlFor="notes">Private notes</Label>
+            <Label htmlFor="notes">Private Notes</Label>
             <Textarea
               id="notes"
               value={draft.notes}
@@ -242,15 +249,15 @@ export function SettingsPanel() {
             />
           </div>
           <Button type="button" onClick={() => void saveProfile()} disabled={saving}>
-            {saving ? "Saving…" : "Save profile"}
+            {saving ? "Saving…" : "Save Profile"}
           </Button>
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>Severity labels</CardTitle>
-          <CardDescription>Rename the scale in your voice.</CardDescription>
+          <CardTitle>Severity Labels</CardTitle>
+          <CardDescription>Rename the Scale in Your Voice.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           {([1, 2, 3, 4, 5] as Severity[]).map((n) => (
@@ -263,7 +270,7 @@ export function SettingsPanel() {
             </div>
           ))}
           <div>
-            <Label>Auto-purge forgiven after (days, 0 = off)</Label>
+            <Label>Auto-Purge Forgiven After (Days, 0 = Off)</Label>
             <Input
               type="number"
               min={0}
@@ -273,18 +280,18 @@ export function SettingsPanel() {
           </div>
           <div className="flex flex-wrap gap-2">
             <Button type="button" onClick={() => void saveSettings()}>
-              Save labels & purge rule
+              Save Labels & Purge Rule
             </Button>
             <Button
               type="button"
               variant="secondary"
               onClick={() =>
                 void purgeForgiven()
-                  .then(() => toast.success("Purged old forgiven entries."))
-                  .catch((e) => toast.error(e instanceof Error ? e.message : "Purge failed"))
+                  .then(() => toast.success("Purged Old Forgiven Entries."))
+                  .catch((e) => toast.error(e instanceof Error ? e.message : "Purge Failed"))
               }
             >
-              Run purge now
+              Run Purge Now
             </Button>
           </div>
         </CardContent>
@@ -292,13 +299,13 @@ export function SettingsPanel() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Log templates</CardTitle>
-          <CardDescription>One-tap offense starters for both of you.</CardDescription>
+          <CardTitle>Log Templates</CardTitle>
+          <CardDescription>One-Tap Offense Starters for Both of You.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="grid gap-2 sm:grid-cols-3">
             <Input
-              placeholder="Template title"
+              placeholder="Template Title"
               value={tplTitle}
               onChange={(e) => setTplTitle(e.target.value)}
             />
@@ -328,18 +335,18 @@ export function SettingsPanel() {
           <Button
             type="button"
             onClick={() => {
-              if (!tplTitle.trim()) return toast.error("Title required");
+              if (!tplTitle.trim()) return toast.error("Title Required");
               void saveTemplate({
                 title: tplTitle.trim(),
                 category: tplCat,
                 severity: tplSev,
               }).then(() => {
                 setTplTitle("");
-                toast.success("Template saved.");
+                toast.success("Template Saved.");
               });
             }}
           >
-            Add template
+            Add Template
           </Button>
           <ul className="space-y-1">
             {templates.map((t) => (
@@ -364,8 +371,8 @@ export function SettingsPanel() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Backup & export</CardTitle>
-          <CardDescription>Export anytime before purging.</CardDescription>
+          <CardTitle>Backup & Export</CardTitle>
+          <CardDescription>Export Anytime Before Purging.</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2">
           <Button type="button" variant="secondary" onClick={handleExportJson}>
@@ -381,13 +388,13 @@ export function SettingsPanel() {
 
       <Card className="border-danger/20">
         <CardHeader>
-          <CardTitle className="text-danger">Danger zone</CardTitle>
-          <CardDescription>Wipe all offenses and disputes. Profile stays.</CardDescription>
+          <CardTitle className="text-danger">Danger Zone</CardTitle>
+          <CardDescription>Wipe All Offenses and Disputes. Profile Stays.</CardDescription>
         </CardHeader>
         <CardContent>
           <Button type="button" variant="danger" onClick={() => void handleClear()}>
             <Trash2 className="size-4" />
-            Clear all offenses
+            Clear All Offenses
           </Button>
         </CardContent>
       </Card>
@@ -406,7 +413,7 @@ function ThemeCard({
     <Card>
       <CardHeader>
         <CardTitle>Appearance</CardTitle>
-        <CardDescription>Light / dark on this device.</CardDescription>
+        <CardDescription>Light / Dark on This Device.</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-wrap gap-2">
         {(
@@ -451,11 +458,11 @@ function PinCard({
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Lock className="size-4" />
-          PIN lock
+          PIN Lock
         </CardTitle>
         <CardDescription>
-          Optional second lock after login — only on this browser.
-          {hasPin ? " A PIN is currently set." : ""}
+          Optional Second Lock After Login — Only on This Browser.
+          {hasPin ? " A PIN Is Currently Set." : ""}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -483,13 +490,13 @@ function PinCard({
           <Button
             type="button"
             onClick={async () => {
-              if (pinA.length < 4) return toast.error("At least 4 characters.");
-              if (pinA !== pinB) return toast.error("PINs don’t match.");
+              if (pinA.length < 4) return toast.error("At Least 4 Characters.");
+              if (pinA !== pinB) return toast.error("PINs Don’t Match.");
               localStorage.setItem(PIN_STORAGE_KEY, await hashPin(pinA));
               sessionStorage.setItem("fafo-pin-ok", "1");
               setPinA("");
               setPinB("");
-              toast.success("PIN set.");
+              toast.success("PIN Set.");
             }}
           >
             Save PIN
@@ -501,13 +508,73 @@ function PinCard({
               onClick={() => {
                 localStorage.removeItem(PIN_STORAGE_KEY);
                 sessionStorage.removeItem("fafo-pin-ok");
-                toast.message("PIN cleared.");
+                toast.message("PIN Cleared.");
               }}
             >
               Remove PIN
             </Button>
           ) : null}
         </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+
+function InviteCard({
+  inviteCode,
+  canManage,
+  mode,
+  onRefresh,
+}: {
+  inviteCode: string | null;
+  canManage: boolean;
+  mode?: "solo" | "couple" | null;
+  onRefresh: () => Promise<void>;
+}) {
+  const [busy, setBusy] = useState(false);
+  async function refreshCode() {
+    setBusy(true);
+    try {
+      const res = await regenerateInviteCode();
+      toast.success(`New code: ${res.inviteCode}`);
+      await onRefresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could Not Refresh Code");
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Household Invite</CardTitle>
+        <CardDescription>
+          Share This Code So Your Partner Can Sign Up and Join This Ledger
+          {mode === "solo" ? " (Turns Solo into a Shared Household)" : ""}.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-wrap items-center gap-3">
+        <code className="rounded-xl border border-border bg-bg px-4 py-2 font-mono text-lg tracking-[0.2em] text-primary">
+          {inviteCode ?? "—"}
+        </code>
+        {inviteCode ? (
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => {
+              void navigator.clipboard.writeText(inviteCode);
+              toast.success("Invite Code Copied.");
+            }}
+          >
+            Copy Code
+          </Button>
+        ) : null}
+        {canManage ? (
+          <Button type="button" variant="secondary" disabled={busy} onClick={() => void refreshCode()}>
+            {busy ? "…" : "New Code"}
+          </Button>
+        ) : null}
       </CardContent>
     </Card>
   );

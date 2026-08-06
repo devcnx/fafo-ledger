@@ -20,7 +20,7 @@ export function ApologiesPanel() {
   const againstMe = offenses.filter((o) => o.againstRole === role && o.status === "open");
 
   async function submit() {
-    if (!body.trim()) return toast.error("Write the apology.");
+    if (!body.trim()) return toast.error("Write the Apology.");
     setSaving(true);
     try {
       await submitApology({
@@ -30,7 +30,7 @@ export function ApologiesPanel() {
       });
       setBody("");
       setOffenseId("");
-      toast.success("Apology filed.");
+      toast.success("Apology Filed.");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed");
     } finally {
@@ -42,20 +42,20 @@ export function ApologiesPanel() {
     <div className="space-y-4">
       <Card>
         <CardHeader>
-          <CardTitle>Submit an apology</CardTitle>
+          <CardTitle>Submit an Apology</CardTitle>
           <CardDescription>
-            Own it. Remorse meter 1–5. Partner can accept or reject.
+            Own It. Remorse Meter 1–5. Partner Can Accept or Reject.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <div>
-            <Label>Linked offense (optional)</Label>
+            <Label>Linked Offense (Optional)</Label>
             <select
               value={offenseId}
               onChange={(e) => setOffenseId(e.target.value)}
-              className="flex h-10 w-full rounded-lg border border-border bg-bg-elevated px-3 text-sm"
+              className="field-control"
             >
-              <option value="">General apology</option>
+              <option value="">General Apology</option>
               {againstMe.map((o) => (
                 <option key={o.id} value={o.id}>
                   {o.title}
@@ -87,23 +87,23 @@ export function ApologiesPanel() {
             <Textarea
               value={body}
               onChange={(e) => setBody(e.target.value)}
-              placeholder="What you did, why it was wrong, what you’ll do differently."
+              placeholder="What You Did, Why It Was Wrong, What You’ll Do Differently."
               className="min-h-24"
             />
           </div>
           <Button onClick={() => void submit()} disabled={saving}>
-            {saving ? "Sending…" : "Send apology"}
+            {saving ? "Sending…" : "Send Apology"}
           </Button>
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>Apology inbox</CardTitle>
+          <CardTitle>Apology Inbox</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           {apologies.length === 0 ? (
-            <p className="py-6 text-center text-sm text-fg-muted">No apologies yet.</p>
+            <p className="py-6 text-center text-sm text-fg-muted">No Apologies Yet.</p>
           ) : (
             apologies.map((a) => {
               const name =
@@ -123,7 +123,7 @@ export function ApologiesPanel() {
                             : "danger"
                       }
                     >
-                      {a.status}
+                      {a.status === "pending" ? "Pending" : a.status === "accepted" ? "Accepted" : a.status === "rejected" ? "Rejected" : a.status}
                     </Badge>
                     <span className="text-xs text-fg-subtle">{formatDateTime(a.createdAt)}</span>
                   </div>
@@ -146,7 +146,7 @@ export function ApologiesPanel() {
                         }
                       >
                         <Check className="size-3.5" />
-                        Accept{a.offenseId ? " + forgive" : ""}
+                        Accept{a.offenseId ? " + Forgive" : ""}
                       </Button>
                       <Button
                         size="sm"
@@ -189,7 +189,7 @@ export function ConsequencesPanel() {
   const [dueDate, setDueDate] = useState("");
 
   async function create() {
-    if (!title.trim()) return toast.error("Title required.");
+    if (!title.trim()) return toast.error("Title Required.");
     try {
       await addConsequence({
         title: title.trim(),
@@ -202,7 +202,7 @@ export function ConsequencesPanel() {
       setDescription("");
       setTriggerRule("");
       setDueDate("");
-      toast.success("Consequence added.");
+      toast.success("Consequence Added.");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed");
     }
@@ -214,10 +214,10 @@ export function ConsequencesPanel() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Scale className="size-5 text-primary" />
-            Consequences board
+            Consequences Board
           </CardTitle>
           <CardDescription>
-            Agreed “if X then Y” rules. Assigned partner clears them when done.
+            Agreed “If X Then Y” Rules. Assigned Partner Clears Them When Done.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -226,15 +226,15 @@ export function ConsequencesPanel() {
             <Input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g. Cook dinner this week"
+              placeholder="E.g. Cook Dinner This Week"
             />
           </div>
           <div>
-            <Label>If / when (trigger)</Label>
+            <Label>If / When (Trigger)</Label>
             <Input
               value={triggerRule}
               onChange={(e) => setTriggerRule(e.target.value)}
-              placeholder="If late without text 2×…"
+              placeholder="If Late Without Text 2×…"
             />
           </div>
           <div>
@@ -247,22 +247,22 @@ export function ConsequencesPanel() {
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <Label>Assigned to</Label>
+              <Label>Assigned To</Label>
               <select
                 value={assignedToRole}
                 onChange={(e) => setAssignedToRole(e.target.value as AppRole)}
-                className="flex h-10 w-full rounded-lg border border-border bg-bg-elevated px-3 text-sm"
+                className="field-control"
               >
                 <option value="subject">{profile.subjectName}</option>
                 <option value="tracker">{profile.trackerName}</option>
               </select>
             </div>
             <div>
-              <Label>Due (optional)</Label>
+              <Label>Due (Optional)</Label>
               <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
             </div>
           </div>
-          <Button onClick={() => void create()}>Add consequence</Button>
+          <Button onClick={() => void create()}>Add Consequence</Button>
         </CardContent>
       </Card>
 
@@ -270,7 +270,7 @@ export function ConsequencesPanel() {
         {consequences.length === 0 ? (
           <Card>
             <CardContent className="py-10 text-center text-sm text-fg-muted">
-              Board is empty. Write the rules before someone “forgets.”
+              Board Is Empty. Write the Rules Before Someone “Forgets.”
             </CardContent>
           </Card>
         ) : (
@@ -286,7 +286,7 @@ export function ConsequencesPanel() {
                         c.status === "open" ? "warn" : c.status === "done" ? "success" : "muted"
                       }
                     >
-                      {c.status}
+                      {c.status === "open" ? "Open" : c.status === "done" ? "Done" : c.status === "cancelled" ? "Cancelled" : c.status}
                     </Badge>
                     <Badge variant="outline">→ {assignee.split(" ")[0]}</Badge>
                     {c.dueDate ? (
@@ -307,11 +307,11 @@ export function ConsequencesPanel() {
                         variant="soft"
                         onClick={() =>
                           void updateConsequence(c.id, { status: "done" }).then(() =>
-                            toast.success("Marked done."),
+                            toast.success("Marked Done."),
                           )
                         }
                       >
-                        Mark done
+                        Mark Done
                       </Button>
                     ) : null}
                     <Button
@@ -343,7 +343,7 @@ export function CreditsPanel() {
   );
 
   async function create() {
-    if (!title.trim()) return toast.error("Title required.");
+    if (!title.trim()) return toast.error("Title Required.");
     try {
       await addCredit({
         date: centralLocalToIso(toLocalDatetimeValue()),
@@ -353,7 +353,7 @@ export function CreditsPanel() {
       });
       setTitle("");
       setDescription("");
-      toast.success("Credit logged.");
+      toast.success("Credit Logged.");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed");
     }
@@ -365,26 +365,26 @@ export function CreditsPanel() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Heart className="size-5 text-primary" />
-            Love / credit ledger
+            Love / Credit Ledger
           </CardTitle>
           <CardDescription>
-            Soften the roast with receipts for good deeds. Credited person accepts.
+            Soften the Roast with Receipts for Good Deeds. Credited Person Accepts.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <div>
-            <Label>Who gets the credit?</Label>
+            <Label>Who Gets the Credit?</Label>
             <select
               value={aboutRole}
               onChange={(e) => setAboutRole(e.target.value as AppRole)}
-              className="flex h-10 w-full rounded-lg border border-border bg-bg-elevated px-3 text-sm"
+              className="field-control"
             >
               <option value="subject">{profile.subjectName}</option>
               <option value="tracker">{profile.trackerName}</option>
             </select>
           </div>
           <div>
-            <Label>What they did</Label>
+            <Label>What They Did</Label>
             <Input value={title} onChange={(e) => setTitle(e.target.value)} />
           </div>
           <div>
@@ -395,7 +395,7 @@ export function CreditsPanel() {
               className="min-h-16"
             />
           </div>
-          <Button onClick={() => void create()}>Log good deed</Button>
+          <Button onClick={() => void create()}>Log Good Deed</Button>
         </CardContent>
       </Card>
 
@@ -418,7 +418,13 @@ export function CreditsPanel() {
                           : "danger"
                     }
                   >
-                    {c.status}
+                    {c.status === "pending"
+                      ? "Pending"
+                      : c.status === "accepted"
+                        ? "Accepted"
+                        : c.status === "rejected"
+                          ? "Rejected"
+                          : c.status}
                   </Badge>
                   <span className="text-xs text-fg-subtle">{formatDateTime(c.date)}</span>
                 </div>
@@ -463,12 +469,12 @@ export function QuotesPanel() {
   const [saidByRole, setSaidByRole] = useState<AppRole>("subject");
 
   async function create() {
-    if (!quoteText.trim()) return toast.error("Need a quote.");
+    if (!quoteText.trim()) return toast.error("Need a Quote.");
     try {
       await addQuote({ quoteText: quoteText.trim(), saidByRole, context, pinned: false });
       setQuoteText("");
       setContext("");
-      toast.success("Pinned to the wall… well, added.");
+      toast.success("Pinned to the Wall… Well, Added.");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed");
     }
@@ -480,17 +486,17 @@ export function QuotesPanel() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Quote className="size-5 text-primary" />
-            Quotes wall
+            Quotes Wall
           </CardTitle>
-          <CardDescription>Best (worst) lines — forever evidence.</CardDescription>
+          <CardDescription>Best (Worst) Lines — Forever Evidence.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <div>
-            <Label>Said by</Label>
+            <Label>Said By</Label>
             <select
               value={saidByRole}
               onChange={(e) => setSaidByRole(e.target.value as AppRole)}
-              className="flex h-10 w-full rounded-lg border border-border bg-bg-elevated px-3 text-sm"
+              className="field-control"
             >
               <option value="subject">{profile.subjectName}</option>
               <option value="tracker">{profile.trackerName}</option>
@@ -504,7 +510,7 @@ export function QuotesPanel() {
             <Label>Context</Label>
             <Input value={context} onChange={(e) => setContext(e.target.value)} />
           </div>
-          <Button onClick={() => void create()}>Add quote</Button>
+          <Button onClick={() => void create()}>Add Quote</Button>
         </CardContent>
       </Card>
 
@@ -563,30 +569,30 @@ export function CaseFilePanel() {
     <div className="space-y-4">
       <Card>
         <CardHeader>
-          <CardTitle>My case file</CardTitle>
+          <CardTitle>My Case File</CardTitle>
           <CardDescription>
             {role === "subject" ? profile.subjectName : profile.trackerName} — what's on you,
             your disputes, and what not to do again.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <Mini label="Open against you" value={String(open.length)} />
-          <Mini label="Your disputes" value={String(myDisputes.length)} />
+          <Mini label="Open Against You" value={String(open.length)} />
+          <Mini label="Your Disputes" value={String(myDisputes.length)} />
           <Mini
             label="Won"
             value={String(myDisputes.filter((d) => d.status === "accepted").length)}
           />
-          <Mini label="Apologies sent" value={String(myApologies.length)} />
+          <Mini label="Apologies Sent" value={String(myApologies.length)} />
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>Open against you</CardTitle>
+          <CardTitle>Open Against You</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
           {open.length === 0 ? (
-            <p className="text-sm text-fg-muted">Clean slate on open cases.</p>
+            <p className="text-sm text-fg-muted">Clean Slate on Open Cases.</p>
           ) : (
             open.map((o) => (
               <div key={o.id} className="rounded-lg border border-border p-3">
@@ -603,12 +609,12 @@ export function CaseFilePanel() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Things not to do again</CardTitle>
-          <CardDescription>High severity + forgiven history.</CardDescription>
+          <CardTitle>Things Not to Do Again</CardTitle>
+          <CardDescription>High Severity + Forgiven History.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-2">
           {lessons.length === 0 ? (
-            <p className="text-sm text-fg-muted">No lessons filed yet. Keep it that way.</p>
+            <p className="text-sm text-fg-muted">No Lessons Filed Yet. Keep It That Way.</p>
           ) : (
             lessons.map((o) => (
               <div key={o.id} className="rounded-lg border border-border bg-bg-subtle px-3 py-2 text-sm">

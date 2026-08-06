@@ -18,6 +18,8 @@ export const Route = createFileRoute("/login")({
 function Login() {
   const navigate = useNavigate();
   const { user, isPending } = useCurrentUserState();
+  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -37,23 +39,44 @@ function Login() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!authEnabled) {
-      toast.error("Sign-in is disabled.");
+      toast.error("Sign-In Is Disabled.");
       return;
     }
     setSubmitting(true);
     try {
-      const { error } = await authClient.signIn.email({
-        email: email.trim().toLowerCase(),
-        password,
-      });
-      if (error) {
-        toast.error(error.message ?? "Sign-in failed");
-        return;
+      if (mode === "signup") {
+        if (!name.trim()) {
+          toast.error("Enter Your Name.");
+          return;
+        }
+        if (password.length < 8) {
+          toast.error("Password Must Be at Least 8 Characters.");
+          return;
+        }
+        const { error } = await authClient.signUp.email({
+          email: email.trim().toLowerCase(),
+          password,
+          name: name.trim(),
+        });
+        if (error) {
+          toast.error(error.message ?? "Sign-Up Failed");
+          return;
+        }
+        toast.success("Account Created. Welcome.");
+      } else {
+        const { error } = await authClient.signIn.email({
+          email: email.trim().toLowerCase(),
+          password,
+        });
+        if (error) {
+          toast.error(error.message ?? "Sign-In Failed");
+          return;
+        }
+        toast.success("Signed In.");
       }
-      toast.success("Signed in.");
       await navigate({ to: "/" });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Sign-in failed");
+      toast.error(err instanceof Error ? err.message : "Auth Failed");
     } finally {
       setSubmitting(false);
     }
@@ -68,19 +91,54 @@ function Login() {
   }
 
   return (
-    <main className="grid min-h-[calc(100dvh-var(--grok-banner-h,0px))] place-items-center bg-bg px-4 py-10">
-      <Card className="w-full max-w-sm">
+    <main className="grid min-h-[calc(100dvh-var(--grok-banner-h,0px))] place-items-center bg-bg px-3 py-8 sm:px-4 sm:py-10">
+      <Card className="w-full max-w-sm sm:max-w-md">
         <CardHeader className="items-center text-center">
           <span className="grid size-12 place-items-center rounded-2xl bg-primary text-primary-fg">
             <ShieldAlert className="size-6" />
           </span>
           <CardTitle className="mt-2">{APP_NAME}</CardTitle>
           <CardDescription>
-            Private household ledger. Sign in with your email account.
+            {mode === "signin"
+              ? "Private Household Ledgers. Sign In to Continue."
+              : "Create Your Account. Then Set Up Solo or Couple Mode."}
           </CardDescription>
         </CardHeader>
         <CardContent>
+          <div className="mb-4 grid grid-cols-2 gap-1 rounded-xl bg-bg-subtle p-1">
+            <button
+              type="button"
+              onClick={() => setMode("signin")}
+              className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                mode === "signin" ? "bg-bg-elevated text-fg shadow-sm" : "text-fg-muted"
+              }`}
+            >
+              Sign In
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode("signup")}
+              className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                mode === "signup" ? "bg-bg-elevated text-fg shadow-sm" : "text-fg-muted"
+              }`}
+            >
+              Sign Up
+            </button>
+          </div>
           <form onSubmit={handleSubmit} className="space-y-3">
+            {mode === "signup" ? (
+              <div>
+                <Label htmlFor="name">Your Name</Label>
+                <Input
+                  id="name"
+                  autoComplete="name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="First Last"
+                  required
+                />
+              </div>
+            ) : null}
             <div>
               <Label htmlFor="email">Email</Label>
               <Input
@@ -98,19 +156,23 @@ function Login() {
               <Input
                 id="password"
                 type="password"
-                autoComplete="current-password"
+                autoComplete={mode === "signup" ? "new-password" : "current-password"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
+                minLength={mode === "signup" ? 8 : undefined}
               />
             </div>
             <Button type="submit" className="w-full" disabled={submitting}>
-              {submitting ? "Signing in…" : "Sign in"}
+              {submitting
+                ? mode === "signup"
+                  ? "Creating…"
+                  : "Signing In…"
+                : mode === "signup"
+                  ? "Create Account"
+                  : "Sign In"}
             </Button>
           </form>
-          <p className="mt-4 text-center text-xs text-fg-subtle">
-            Accounts are pre-provisioned for Brittaney and Michael only.
-          </p>
         </CardContent>
       </Card>
       <Toaster position="bottom-center" />

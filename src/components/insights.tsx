@@ -42,7 +42,7 @@ export function Insights() {
     return (
       <Card>
         <CardContent className="py-16 text-center">
-          <p className="font-display text-xl font-semibold">No data yet</p>
+          <p className="font-display text-xl font-semibold">No Data Yet</p>
           <p className="mt-2 text-sm text-fg-muted">
             Log a few offenses and patterns will show up here.
           </p>
@@ -56,7 +56,7 @@ export function Insights() {
       {warnings.length > 0 ? (
         <Card className="border-warn/30">
           <CardHeader>
-            <CardTitle className="text-warn">Active warnings</CardTitle>
+            <CardTitle className="text-warn">Active Warnings</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
             {warnings.map((w) => (
@@ -70,8 +70,8 @@ export function Insights() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Pattern notes</CardTitle>
-          <CardDescription>Auto-generated from the ledger (Central time).</CardDescription>
+          <CardTitle>Pattern Notes</CardTitle>
+          <CardDescription>Auto-Generated from the Ledger (Central Time).</CardDescription>
         </CardHeader>
         <CardContent>
           <ul className="space-y-2">
@@ -90,7 +90,7 @@ export function Insights() {
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>By severity</CardTitle>
+            <CardTitle>By Severity</CardTitle>
           </CardHeader>
           <CardContent className="h-64">
             <ResponsiveContainer width="100%" height="100%">
@@ -118,8 +118,8 @@ export function Insights() {
 
         <Card>
           <CardHeader>
-            <CardTitle>By day of week</CardTitle>
-            <CardDescription>Central time.</CardDescription>
+            <CardTitle>By Day of Week</CardTitle>
+            <CardDescription>Central Time.</CardDescription>
           </CardHeader>
           <CardContent className="h-64">
             <ResponsiveContainer width="100%" height="100%">
@@ -144,7 +144,7 @@ export function Insights() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Top categories</CardTitle>
+          <CardTitle>Top Categories</CardTitle>
         </CardHeader>
         <CardContent className="h-72">
           <ResponsiveContainer width="100%" height="100%">
@@ -181,7 +181,7 @@ export function Insights() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Monthly volume</CardTitle>
+          <CardTitle>Monthly Volume</CardTitle>
         </CardHeader>
         <CardContent className="h-64">
           <ResponsiveContainer width="100%" height="100%">
@@ -206,7 +206,7 @@ export function Insights() {
       {s.last ? (
         <Card>
           <CardHeader>
-            <CardTitle>Most recent</CardTitle>
+            <CardTitle>Most Recent</CardTitle>
             <CardDescription>{formatDate(s.last.date)}</CardDescription>
           </CardHeader>
           <CardContent>

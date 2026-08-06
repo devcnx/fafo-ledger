@@ -1,7 +1,7 @@
 import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
 import { CreatedWithGrokBanner } from "@/components/created-with-grok-banner";
 import { AuthProvider } from "@/lib/auth/provider";
-import { APP_NAME } from "@/lib/constants";
+import { APP_NAME, APP_TAGLINE } from "@/lib/constants";
 import appCss from "../styles.css?url";
 
 const host = import.meta.env.VITE_PUBLIC_HOSTNAME;
@@ -13,14 +13,19 @@ export const Route = createRootRoute({
   head: () => ({
     meta: [
       { charSet: "utf-8" },
-      { name: "viewport", content: "width=device-width, initial-scale=1" },
       {
-        title: `${APP_NAME} — Brittaney's Michael Tracker`,
+        name: "viewport",
+        content: "width=device-width, initial-scale=1, viewport-fit=cover",
+      },
+      { name: "theme-color", content: "#b8331d" },
+      { name: "mobile-web-app-capable", content: "yes" },
+      { name: "apple-mobile-web-app-capable", content: "yes" },
+      {
+        title: `${APP_NAME} — Private Household Ledger`,
       },
       {
         name: "description",
-        content:
-          "Private offense ledger: log what Michael did, track severity, patterns, and FAFO reports.",
+        content: APP_TAGLINE,
       },
       ...(ogImage
         ? [
@@ -47,7 +52,7 @@ function RootDocument() {
       <head>
         <HeadContent />
       </head>
-      <body>
+      <body className="min-h-dvh antialiased">
         <CreatedWithGrokBanner />
         <AuthProvider>
           <Outlet />

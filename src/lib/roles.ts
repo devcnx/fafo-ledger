@@ -1,7 +1,17 @@
 export type AppRole = "tracker" | "subject";
+export type HouseholdMode = "solo" | "couple";
 
-/** Hardcoded household accounts for this private ledger. */
-export const HOUSEHOLD = {
+/** Stable id for Brittaney & Michael's household — never change this. */
+export const LEGACY_HOUSEHOLD_ID = "hh-perry-lucido";
+
+/**
+ * Seed identities for the original Perry–Lucido ledger.
+ * These accounts keep all existing data; membership is tied by email.
+ */
+export const LEGACY_HOUSEHOLD = {
+  id: LEGACY_HOUSEHOLD_ID,
+  name: "Perry–Lucido Ledger",
+  inviteCode: "FAFO0616",
   tracker: {
     email: "bperrymorgan@me.com",
     name: "Brittaney Perry-Morgan",
@@ -14,27 +24,13 @@ export const HOUSEHOLD = {
   },
 } as const;
 
-const byEmail: Record<string, { name: string; role: AppRole }> = {
-  [HOUSEHOLD.tracker.email]: {
-    name: HOUSEHOLD.tracker.name,
-    role: HOUSEHOLD.tracker.role,
-  },
-  [HOUSEHOLD.subject.email]: {
-    name: HOUSEHOLD.subject.name,
-    role: HOUSEHOLD.subject.role,
-  },
-};
+/** @deprecated Use LEGACY_HOUSEHOLD — kept so older imports don't break mid-refactor. */
+export const HOUSEHOLD = {
+  tracker: LEGACY_HOUSEHOLD.tracker,
+  subject: LEGACY_HOUSEHOLD.subject,
+} as const;
 
-export function roleForEmail(email: string | null | undefined): AppRole | null {
-  if (!email) return null;
-  return byEmail[email.trim().toLowerCase()]?.role ?? null;
-}
-
-export function isAllowedEmail(email: string | null | undefined): boolean {
-  return roleForEmail(email) !== null;
-}
-
-export function displayNameForEmail(email: string | null | undefined): string | null {
-  if (!email) return null;
-  return byEmail[email.trim().toLowerCase()]?.name ?? null;
+export function roleLabel(role: AppRole, profile?: { trackerName: string; subjectName: string }) {
+  if (role === "tracker") return profile?.trackerName?.split(" ")[0] ?? "Tracker";
+  return profile?.subjectName?.split(" ")[0] ?? "Partner";
 }

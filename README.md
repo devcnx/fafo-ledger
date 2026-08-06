@@ -1,8 +1,24 @@
 # FAFO Ledger
 
-Private household ledger for **Brittaney Perry-Morgan** and **Michael Lucido**.
+Private multi-household offense ledgers. **Anyone can sign up** (solo or couple). Brittaney Perry-Morgan & Michael Lucido keep their original shared ledger, tied to their accounts.
 
-Track offenses, attach receipts, dispute/appeal entries, apologies, consequences, credits, quotes, and printable FAFO reports. All times use **America/Chicago (Central)**.
+## Your Household (seeded)
+
+| Person | Email | Role |
+| --- | --- | --- |
+| Brittaney | `bperrymorgan@me.com` | Owner / tracker |
+| Michael | `spacehoodstalian@gmail.com` | Partner / subject |
+
+Default password is set in `src/lib/seed.server.ts` (anniversary date). Household id: `hh-perry-lucido` (stable). Invite code: `FAFO0616`.
+
+All times use **America/Chicago (Central)**.
+
+## New users
+
+1. **Sign Up** on the login page  
+2. Choose **Just Me (Solo)**, **Me + Someone**, or **Join with Invite Code**  
+3. Customize party names, anniversary, birthdays in Settings  
+4. Share the household **invite code** so a partner can join and dispute
 
 ## Stack
 
@@ -11,46 +27,17 @@ Track offenses, attach receipts, dispute/appeal entries, apologies, consequences
 - Tailwind CSS v4
 - Better Auth (email/password)
 - PGLite (local) / Postgres when `DATABASE_URL` is set
-
-## Accounts
-
-Seeded household logins (change passwords after first deploy if needed):
-
-| Person | Email | Role |
-| --- | --- | --- |
-| Brittaney | `bperrymorgan@me.com` | Tracker (full access) |
-| Michael | `spacehoodstalian@gmail.com` | Subject (log + dispute) |
-
-Default password is set in `src/lib/seed.server.ts` (anniversary date).
+- Multi-tenant `households` + `household_members` (migration `0004_households.sql`)
 
 ## Local development
 
 ```bash
 npm install
 npm run dev   # http://0.0.0.0:8080
-```
-
-```bash
 npm run typecheck
 npm run build
 ```
 
 ## Deploy
 
-Built for Vercel via Nitro (`nitro({ preset: "vercel" })` on build). Set `DATABASE_URL` to a Postgres connection for production persistence; without it, the app uses embedded PGLite (fine for preview, not multi-instance prod).
-
-## Features
-
-- Bidirectional logging (both partners)
-- Disputes/appeals with counter-evidence
-- Evidence: photos, voice notes, pasted text
-- Peace streak, heat map, pattern warnings
-- Apologies + remorse meter
-- Consequences board
-- Love/credit ledger
-- Quotes wall
-- Case file scoreboard
-- Notifications
-- Custom severity labels & templates
-- Light/dark theme + optional device PIN
-- Export JSON/CSV · printable FAFO packet
+Built for Vercel via Nitro. Set `DATABASE_URL` to Postgres for production persistence.
