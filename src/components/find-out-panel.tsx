@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input, Label, Textarea } from "@/components/ui/input";
-import { FIND_OUT_SUGGESTIONS } from "@/lib/constants";
+import { FIND_OUT_SUGGESTIONS, PERK_SUGGESTIONS } from "@/lib/constants";
 import {
   addCentralDays,
   findOutBadgeVariant,
@@ -26,7 +26,8 @@ const STEPS = [
 ];
 
 export function FindOutPanel() {
-  const { findOuts, offenses, profile, role, issueFindOut, resolveFindOut } = useLedger();
+  const { findOuts, offenses, perks, profile, role, issueFindOut, resolveFindOut, grantPerk } =
+    useLedger();
   const otherRole = role === "tracker" ? "subject" : "tracker";
   const otherName = otherRole === "subject" ? profile.subjectName : profile.trackerName;
 
@@ -150,6 +151,8 @@ export function FindOutPanel() {
                 appealNote={appealNote[f.id] ?? ""}
                 onAppealNote={(v) => setAppealNote((prev) => ({ ...prev, [f.id]: v }))}
                 resolveFindOut={resolveFindOut}
+                grantPerk={grantPerk}
+                alreadyGranted={perks.some((p) => p.sourceId === f.id)}
               />
             ))}
           </CardContent>
@@ -248,6 +251,8 @@ export function FindOutPanel() {
                   appealNote={appealNote[f.id] ?? ""}
                   onAppealNote={(v) => setAppealNote((prev) => ({ ...prev, [f.id]: v }))}
                   resolveFindOut={resolveFindOut}
+                  grantPerk={grantPerk}
+                  alreadyGranted={perks.some((p) => p.sourceId === f.id)}
                 />
               </li>
             ))}
@@ -270,6 +275,8 @@ function FindOutCard({
   appealNote,
   onAppealNote,
   resolveFindOut,
+  grantPerk,
+  alreadyGranted,
 }: {
   f: FindOut;
   role: "tracker" | "subject" | null;
@@ -282,6 +289,15 @@ function FindOutCard({
     action: "acknowledge" | "serve" | "waive" | "appeal" | "escalate";
     note?: string;
   }) => Promise<void>;
+  grantPerk: (input: {
+    title: string;
+    body?: string;
+    kind?: import("@/lib/types").PerkKind;
+    source?: "manual" | "fo_served";
+    sourceId?: string | null;
+    expiresOn?: string | null;
+  }) => Promise<void>;
+  alreadyGranted: boolean;
 }) {
   const assignee = f.assignedToRole === "tracker" ? profile.trackerName : profile.subjectName;
   const issuer = f.issuedByRole === "tracker" ? profile.trackerName : profile.subjectName;
@@ -407,6 +423,37 @@ function FindOutCard({
             >
               Appeal
             </Button>
+          </div>
+        ) : null}
+
+        {iIssued && f.status === "served" ? (
+          <div className="rounded-lg border border-success/30 bg-success-soft/40 p-3">
+            <p className="text-xs font-semibold tracking-wide text-success uppercase">
+              {alreadyGranted ? "Perk Already Granted" : "They Served It. Grant A Perk."}
+            </p>
+            {!alreadyGranted ? (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {PERK_SUGGESTIONS.filter((s) => s.kind === "jail_pass" || s.kind === "favor").slice(0, 4).map((s) => (
+                  <button
+                    key={s.title}
+                    type="button"
+                    onClick={() =>
+                      void grantPerk({
+                        title: s.title,
+                        body: s.body,
+                        kind: s.kind,
+                        source: "fo_served",
+                        sourceId: f.id,
+                        expiresOn: addCentralDays(s.expiresDays),
+                      }).then(() => toast.success("Perk Banked."))
+                    }
+                    className="inline-flex min-h-9 items-center rounded-full border border-border bg-bg-elevated px-2.5 py-1.5 text-xs font-medium text-fg-muted hover:border-primary hover:text-primary"
+                  >
+                    {s.title}
+                  </button>
+                ))}
+              </div>
+            ) : null}
           </div>
         ) : null}
       </CardContent>

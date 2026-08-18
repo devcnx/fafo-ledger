@@ -8,7 +8,7 @@ import { selectStats } from "@/lib/store";
 import { daysBetween, formatDate, formatDateTime } from "@/lib/utils";
 
 export function FafoReport() {
-  const { profile, offenses, disputes, findOuts, role, settings } = useLedger();
+  const { profile, offenses, disputes, findOuts, perks, role, settings } = useLedger();
   const stats = selectStats(offenses, role);
 
   const open = offenses
@@ -52,6 +52,9 @@ export function FafoReport() {
             </Badge>
             <Badge className="border-0 bg-primary-fg/15 text-primary-fg">
               {findOuts.filter((f) => f.status === "served").length} FO Served
+            </Badge>
+            <Badge className="border-0 bg-primary-fg/15 text-primary-fg">
+              {perks.filter((p) => p.status === "available" || p.status === "pending").length} Perks Open
             </Badge>
             <Badge className="border-0 bg-primary-fg/15 text-primary-fg">
               {stats.open} Open FA
@@ -118,6 +121,19 @@ export function FafoReport() {
               No Offenses on File. Either Angel Mode or Logging Hasn’t Started.
             </p>
           ) : null}
+          {perks.length > 0 ? (
+            <p>
+              <strong>
+                {perks.filter((p) => p.status === "available" || p.status === "pending").length}
+              </strong>{" "}
+              perk
+              {perks.filter((p) => p.status === "available" || p.status === "pending").length === 1
+                ? ""
+                : "s"}{" "}
+              still in the bank.{" "}
+              {perks.filter((p) => p.status === "redeemed").length} cashed in.
+            </p>
+          ) : null}
         </CardContent>
       </Card>
 
@@ -152,6 +168,44 @@ export function FafoReport() {
                 {f.dueDate ? (
                   <p className="mt-1 text-xs text-fg-subtle">Due {formatDate(f.dueDate)}</p>
                 ) : null}
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {perks.length > 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Perks On The Record</CardTitle>
+            <CardDescription>The Bill For Good Behavior.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {perks.map((p) => (
+              <div key={p.id} className="rounded-lg border border-border p-3 text-sm">
+                <div className="flex flex-wrap gap-2">
+                  <Badge
+                    variant={
+                      p.status === "redeemed"
+                        ? "success"
+                        : p.status === "pending"
+                          ? "warn"
+                          : p.status === "revoked"
+                            ? "muted"
+                            : "default"
+                    }
+                  >
+                    {p.status === "available"
+                      ? "In The Bank"
+                      : p.status === "pending"
+                        ? "Cash-In Pending"
+                        : p.status === "redeemed"
+                          ? "Cashed In"
+                          : "Revoked"}
+                  </Badge>
+                  <span className="font-medium">{p.title}</span>
+                </div>
+                {p.body ? <p className="mt-1 text-fg-muted">{p.body}</p> : null}
               </div>
             ))}
           </CardContent>

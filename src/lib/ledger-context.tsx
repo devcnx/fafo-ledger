@@ -18,8 +18,10 @@ import {
   deleteQuote as deleteQuoteFn,
   deleteTemplate as deleteTemplateFn,
   getLedger,
+  grantPerk as grantPerkFn,
   issueFindOut as issueFindOutFn,
   resolveFindOut as resolveFindOutFn,
+  resolvePerk as resolvePerkFn,
   markNotificationsRead as markNotificationsReadFn,
   purgeForgiven as purgeForgivenFn,
   resolveApology as resolveApologyFn,
@@ -50,6 +52,8 @@ import type {
   Offense,
   OffenseStatus,
   OffenseTemplate,
+  Perk,
+  PerkKind,
   Profile,
   Quote,
   Severity,
@@ -81,6 +85,7 @@ type LedgerContextValue = {
   notifications: AppNotification[];
   templates: OffenseTemplate[];
   categories: string[];
+  perks: Perk[];
   refresh: () => Promise<void>;
   addOffense: (input: {
     date: string;
@@ -167,6 +172,20 @@ type LedgerContextValue = {
   resolveFindOut: (input: {
     id: string;
     action: "acknowledge" | "serve" | "waive" | "appeal" | "escalate";
+    note?: string;
+  }) => Promise<void>;
+  grantPerk: (input: {
+    title: string;
+    body?: string;
+    kind?: PerkKind;
+    assignedToRole?: AppRole;
+    expiresOn?: string | null;
+    source?: "manual" | "fo_served";
+    sourceId?: string | null;
+  }) => Promise<void>;
+  resolvePerk: (input: {
+    id: string;
+    action: "redeem" | "honor" | "bounce" | "revoke";
     note?: string;
   }) => Promise<void>;
   addCredit: (input: {
@@ -274,6 +293,7 @@ export function LedgerProvider({ children }: { children: ReactNode }) {
       notifications: snap?.notifications ?? [],
       templates: snap?.templates ?? [],
       categories,
+      perks: snap?.perks ?? [],
       refresh,
       addOffense: async (input) => {
         await addOffenseFn({ data: input });
@@ -361,6 +381,14 @@ export function LedgerProvider({ children }: { children: ReactNode }) {
       },
       resolveFindOut: async (input) => {
         await resolveFindOutFn({ data: input });
+        await refresh();
+      },
+      grantPerk: async (input) => {
+        await grantPerkFn({ data: input });
+        await refresh();
+      },
+      resolvePerk: async (input) => {
+        await resolvePerkFn({ data: input });
         await refresh();
       },
       addCredit: async (input) => {

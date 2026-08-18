@@ -23,6 +23,8 @@ export function SettingsPanel() {
     consequences,
     credits,
     quotes,
+    findOuts,
+    perks,
     role,
     settings,
     updateSettings,
@@ -120,8 +122,10 @@ export function SettingsPanel() {
       disputes,
       apologies,
       consequences,
+      findOuts,
       credits,
       quotes,
+      perks,
     };
     downloadText(
       `fafo-ledger-${centralTodayYmd()}.json`,

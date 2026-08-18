@@ -154,3 +154,25 @@ export type OffenseTemplate = {
   ownerRole: "tracker" | "subject" | "both";
   createdAt: string;
 };
+
+export type PerkKind = "favor" | "pass" | "date" | "jail_pass";
+
+export type PerkStatus = "available" | "pending" | "redeemed" | "revoked";
+
+export type Perk = {
+  id: string;
+  title: string;
+  body: string;
+  kind: PerkKind;
+  status: PerkStatus;
+  grantedByRole: AppRole;
+  grantedByEmail: string;
+  assignedToRole: AppRole;
+  source: "manual" | "fo_served";
+  sourceId: string | null;
+  expiresOn: string | null;
+  redeemedAt: string | null;
+  honorNote: string;
+  createdAt: string;
+  updatedAt: string;
+};

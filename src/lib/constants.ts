@@ -121,6 +121,74 @@ export const APP_TAGLINE = "Fuck Around And Find Out — With Receipts.";
 export const PIN_STORAGE_KEY = "fafo-pin-hash-v1";
 export const THEME_STORAGE_KEY = "fafo-theme-v1";
 
+export const PERK_SUGGESTIONS: {
+  title: string;
+  body: string;
+  kind: import("./types").PerkKind;
+  expiresDays: number;
+}[] = [
+  {
+    title: "Breakfast In Bed",
+    body: "You Stay Put. I Cook, Carry, And Clean The Tray.",
+    kind: "favor",
+    expiresDays: 14,
+  },
+  {
+    title: "You Pick Dinner. I Pay.",
+    body: "Your Call. I Handle Ordering, Pickup, And The Bill.",
+    kind: "favor",
+    expiresDays: 14,
+  },
+  {
+    title: "Chore Pass — One Night Off",
+    body: "Dishes, Trash, Counters. I Own Them. You Don't.",
+    kind: "pass",
+    expiresDays: 21,
+  },
+  {
+    title: "Sleep In Saturday",
+    body: "I Take Morning Duty. You Sleep Until You Decide Not To.",
+    kind: "pass",
+    expiresDays: 21,
+  },
+  {
+    title: "Control The Remote",
+    body: "Your Show. No Commentary. I Sit Through It.",
+    kind: "pass",
+    expiresDays: 14,
+  },
+  {
+    title: "Phone-Free Date Night. I Plan It.",
+    body: "I Pick The Place, Time, And Sit The Phone In The Car.",
+    kind: "date",
+    expiresDays: 30,
+  },
+  {
+    title: "Massage / Back Rub",
+    body: "Twenty Minutes. No Negotiating It Down To Five.",
+    kind: "favor",
+    expiresDays: 14,
+  },
+  {
+    title: "Get Out Of Jail Free",
+    body: "Cash This To Waive One Open Find Out. The FO Dies. The Perk Dies.",
+    kind: "jail_pass",
+    expiresDays: 90,
+  },
+  {
+    title: "No Questions Asked Favor",
+    body: "You Name It. I Do It. Within Reason, But I Don't Argue First.",
+    kind: "favor",
+    expiresDays: 30,
+  },
+  {
+    title: "Coffee Run. Your Order.",
+    body: "I Go. You Stay. I Remember The Order.",
+    kind: "favor",
+    expiresDays: 7,
+  },
+];
+
 /** Suggested Find Outs by severity. FA without FO is just a diary. */
 export const FIND_OUT_SUGGESTIONS: Record<
   Severity,

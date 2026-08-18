@@ -1,17 +1,20 @@
 import { selectStats } from "@/lib/store";
 import type { AppRole } from "@/lib/roles";
-import type { FindOut, Offense } from "@/lib/types";
+import type { FindOut, Offense, Perk } from "@/lib/types";
 import { Card } from "@/components/ui/card";
 import { isFindOutOpen, isFindOutOverdue } from "@/lib/find-out";
+import { isPerkSpendable } from "@/lib/perks";
 import { cn } from "@/lib/utils";
 
 export function StatsGrid({
   offenses,
   findOuts = [],
+  perks = [],
   role,
 }: {
   offenses: Offense[];
   findOuts?: FindOut[];
+  perks?: Perk[];
   role?: AppRole | null;
 }) {
   const s = selectStats(offenses, role);
@@ -21,6 +24,7 @@ export function StatsGrid({
   const faWithoutFo = offenses.filter(
     (o) => !o.archived && o.status === "open" && !findOuts.some((f) => f.offenseId === o.id),
   ).length;
+  const perkBank = perks.filter((p) => p.assignedToRole === role && isPerkSpendable(p)).length;
 
   const items = [
     { label: "FA", full: "Fuck Arounds Logged", value: String(s.total), tone: "default" as const },
@@ -28,6 +32,7 @@ export function StatsGrid({
     { label: "FO Late", full: "Find Outs Overdue", value: String(foLate), tone: foLate ? ("danger" as const) : ("default" as const) },
     { label: "Served", full: "Find Outs Served", value: String(foServed), tone: foServed ? ("success" as const) : ("default" as const) },
     { label: "No FO", full: "Open FA Without FO", value: String(faWithoutFo), tone: faWithoutFo ? ("warn" as const) : ("default" as const) },
+    { label: "Perks", full: "Perks In Your Bank", value: String(perkBank), tone: perkBank ? ("success" as const) : ("default" as const) },
     { label: "Avg Sev", full: "Avg Severity", value: s.total ? s.avg.toFixed(1) : "—", tone: "default" as const },
     {
       label: "Peace",
@@ -35,7 +40,6 @@ export function StatsGrid({
       value: s.daysSinceLast === null ? "∞" : String(s.daysSinceLast),
       tone: "default" as const,
     },
-    { label: "Nuke", full: "Nuclear", value: String(s.nuclear), tone: s.nuclear ? ("danger" as const) : ("default" as const) },
   ];
 
   return (
@@ -48,6 +52,7 @@ export function StatsGrid({
             item.tone === "danger" && "border-danger/40",
             item.tone === "primary" && "border-primary/40",
             item.tone === "warn" && "border-warn/40",
+            item.tone === "success" && "border-success/40",
           )}
         >
           <div

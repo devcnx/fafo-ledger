@@ -20,6 +20,9 @@ import type {
   Offense,
   OffenseStatus,
   OffenseTemplate,
+  Perk,
+  PerkKind,
+  PerkStatus,
   Profile,
   Quote,
   Severity,
@@ -68,6 +71,7 @@ export type LedgerSnapshot = {
   notifications: AppNotification[];
   templates: OffenseTemplate[];
   categories: string[];
+  perks: Perk[];
 };
 
 function uid() {
@@ -374,6 +378,27 @@ function mapFindOut(row: Record<string, unknown>): FindOut {
   };
 }
 
+function mapPerk(row: Record<string, unknown>): Perk {
+  return {
+    id: String(row.id),
+    title: String(row.title),
+    body: String(row.body ?? ""),
+    kind: String(row.kind ?? "favor") as PerkKind,
+    status: String(row.status ?? "available") as PerkStatus,
+    grantedByRole: String(row.granted_by_role) as AppRole,
+    grantedByEmail: String(row.granted_by_email),
+    assignedToRole: String(row.assigned_to_role) as AppRole,
+    source: String(row.source ?? "manual") as Perk["source"],
+    sourceId: row.source_id == null || row.source_id === "" ? null : String(row.source_id),
+    expiresOn:
+      row.expires_on == null || row.expires_on === "" ? null : String(row.expires_on).slice(0, 10),
+    redeemedAt: row.redeemed_at == null ? null : new Date(String(row.redeemed_at)).toISOString(),
+    honorNote: String(row.honor_note ?? ""),
+    createdAt: new Date(String(row.created_at)).toISOString(),
+    updatedAt: new Date(String(row.updated_at)).toISOString(),
+  };
+}
+
 const evidenceSchema = z.array(
   z.object({
     id: z.string(),
@@ -423,6 +448,7 @@ export const getLedger = createServerFn({ method: "GET" })
         notifications: [],
         templates: [],
         categories: [],
+        perks: [],
       };
     }
     const who = await requireHousehold(context.userId);
@@ -464,6 +490,7 @@ export const getLedger = createServerFn({ method: "GET" })
       notifRows,
       templateRows,
       catRows,
+      perkRows,
     ] = await Promise.all([
       sql<Record<string, unknown>>`select * from offenses where household_id = ${hh} order by date desc`,
       sql<Record<string, unknown>>`select * from disputes where household_id = ${hh} order by created_at desc`,
@@ -480,6 +507,7 @@ export const getLedger = createServerFn({ method: "GET" })
       `,
       sql<Record<string, unknown>>`select * from offense_templates where household_id = ${hh} order by title`,
       sql<{ name: string }>`select name from custom_categories where household_id = ${hh} order by name`,
+      sql<Record<string, unknown>>`select * from perks where household_id = ${hh} order by created_at desc`,
     ]);
 
     return {
@@ -504,6 +532,7 @@ export const getLedger = createServerFn({ method: "GET" })
       notifications: notifRows.map(mapNotif),
       templates: templateRows.map(mapTemplate),
       categories: catRows.map((c) => c.name),
+      perks: perkRows.map(mapPerk),
     };
   });
 
@@ -1783,7 +1812,7 @@ export const resolveFindOut = createServerFn({ method: "POST" })
         action === "acknowledge"
           ? "Find Out Acknowledged"
           : action === "serve"
-            ? "Find Out Served"
+            ? "Find Out Served — Grant Them A Perk?"
             : action === "waive"
               ? "Find Out Waived"
               : action === "appeal"
@@ -1791,7 +1820,185 @@ export const resolveFindOut = createServerFn({ method: "POST" })
                 : "Find Out Escalated",
         String(rows[0].title),
         "findout",
-        "findout",
+        action === "serve" ? "perks" : "findout",
+        who.householdId,
+      );
+    }
+    return { ok: true };
+  });
+
+const grantPerkInput = z.object({
+  title: z.string().min(1).max(200),
+  body: z.string().optional(),
+  kind: z.enum(["favor", "pass", "date", "jail_pass"]).optional(),
+  assignedToRole: z.enum(["tracker", "subject"]).optional(),
+  expiresOn: z.string().nullable().optional(),
+  source: z.enum(["manual", "fo_served"]).optional(),
+  sourceId: z.string().nullable().optional(),
+});
+
+export const grantPerk = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((data: unknown) => grantPerkInput.parse(data))
+  .handler(async ({ context, data }) => {
+    const { ensureSeedUsers } = await import("@/lib/seed.server");
+    const { getSql } = await import("@/lib/db");
+    await ensureSeedUsers();
+    const who = await requireHousehold(context.userId);
+    const assigned = data.assignedToRole ?? (who.role === "tracker" ? "subject" : "tracker");
+    if (assigned === who.role) {
+      throw new Error("You Grant Perks To The Other Person.");
+    }
+    const sql = await getSql();
+    const id = uid();
+    const now = new Date().toISOString();
+    await sql`
+      insert into perks (
+        id, household_id, title, body, kind, status,
+        granted_by_role, granted_by_email, assigned_to_role,
+        source, source_id, expires_on, honor_note, created_at, updated_at
+      ) values (
+        ${id},
+        ${who.householdId},
+        ${data.title.trim()},
+        ${(data.body ?? "").trim()},
+        ${data.kind ?? "favor"},
+        ${"available"},
+        ${who.role},
+        ${who.email},
+        ${assigned},
+        ${data.source ?? "manual"},
+        ${data.sourceId ?? null},
+        ${data.expiresOn || null},
+        ${""},
+        ${now},
+        ${now}
+      )
+    `;
+    const targetEmail = await partnerEmailInHousehold(who.householdId, who.role);
+    if (targetEmail) {
+      await notify(
+        sql,
+        targetEmail,
+        "Perk Banked",
+        data.title.trim(),
+        "perk",
+        "perks",
+        who.householdId,
+      );
+    }
+    return { id };
+  });
+
+const perkActionInput = z.object({
+  id: z.string(),
+  action: z.enum(["redeem", "honor", "bounce", "revoke"]),
+  note: z.string().optional(),
+});
+
+export const resolvePerk = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((data: unknown) => perkActionInput.parse(data))
+  .handler(async ({ context, data }) => {
+    const { ensureSeedUsers } = await import("@/lib/seed.server");
+    const { getSql } = await import("@/lib/db");
+    await ensureSeedUsers();
+    const who = await requireHousehold(context.userId);
+    const sql = await getSql();
+    const rows = await sql<Record<string, unknown>>`
+      select * from perks where id = ${data.id} and household_id = ${who.householdId} limit 1
+    `;
+    if (!rows[0]) throw new Error("Perk Not Found.");
+    const assigned = String(rows[0].assigned_to_role);
+    const grantor = String(rows[0].granted_by_role);
+    const kind = String(rows[0].kind);
+    const status = String(rows[0].status);
+    const now = new Date().toISOString();
+    const action = data.action;
+
+    if (action === "redeem") {
+      if (who.role !== assigned) throw new Error("Only The Holder Can Cash This In.");
+      if (status !== "available") throw new Error("This Perk Is Not In The Bank.");
+      if (kind === "jail_pass") {
+        const openFo = await sql<Record<string, unknown>>`
+          select id, title from find_outs
+          where household_id = ${who.householdId}
+            and assigned_to_role = ${who.role}
+            and status in ('issued', 'acknowledged', 'appealed')
+          order by created_at asc
+          limit 1
+        `;
+        if (!openFo[0]) {
+          throw new Error("No Open Find Out To Waive. Perk Stays In The Bank.");
+        }
+        await sql`
+          update find_outs
+          set status = 'waived', updated_at = ${now}
+          where id = ${String(openFo[0].id)}
+        `;
+        await sql`
+          update perks
+          set status = 'redeemed',
+              redeemed_at = ${now},
+              honor_note = ${`Waived: ${String(openFo[0].title)}`},
+              updated_at = ${now}
+          where id = ${data.id}
+        `;
+      } else {
+        await sql`
+          update perks
+          set status = 'pending', updated_at = ${now}
+          where id = ${data.id}
+        `;
+      }
+    } else if (action === "honor") {
+      if (who.role !== grantor && !who.isOwner) throw new Error("Only The Grantor Can Honor This.");
+      if (status !== "pending") throw new Error("Nothing To Honor Yet.");
+      await sql`
+        update perks
+        set status = 'redeemed',
+            redeemed_at = ${now},
+            honor_note = ${data.note?.trim() || "Honored."},
+            updated_at = ${now}
+        where id = ${data.id}
+      `;
+    } else if (action === "bounce") {
+      if (who.role !== grantor && !who.isOwner) throw new Error("Only The Grantor Can Bounce This.");
+      if (status !== "pending") throw new Error("Nothing To Bounce.");
+      await sql`
+        update perks
+        set status = 'available',
+            honor_note = ${data.note?.trim() || "Bounced. Still In The Bank."},
+            updated_at = ${now}
+        where id = ${data.id}
+      `;
+    } else if (action === "revoke") {
+      if (who.role !== grantor && !who.isOwner) throw new Error("Only The Grantor Can Revoke.");
+      if (status !== "available") throw new Error("Can Only Revoke A Perk Still In The Bank.");
+      await sql`
+        update perks
+        set status = 'revoked', updated_at = ${now}
+        where id = ${data.id}
+      `;
+    }
+
+    const other = await partnerEmailInHousehold(who.householdId, who.role);
+    if (other) {
+      await notify(
+        sql,
+        other,
+        action === "redeem"
+          ? kind === "jail_pass"
+            ? "Jail Pass Cashed"
+            : "Perk Cash-In Requested"
+          : action === "honor"
+            ? "Perk Honored"
+            : action === "bounce"
+              ? "Perk Bounced Back"
+              : "Perk Revoked",
+        String(rows[0].title),
+        "perk",
+        "perks",
         who.householdId,
       );
     }

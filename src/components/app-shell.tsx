@@ -5,6 +5,7 @@ import {
   Briefcase,
   FileWarning,
   Gavel,
+  Gift,
   Heart,
   LayoutDashboard,
   MoreHorizontal,
@@ -27,6 +28,8 @@ import {
 import { FindOutPanel } from "@/components/find-out-panel";
 import { FafoReport } from "@/components/fafo-report";
 import { FoWarrant } from "@/components/fo-warrant";
+import { PerkBank } from "@/components/perk-bank";
+import { PerksPanel } from "@/components/perks-panel";
 import { Insights } from "@/components/insights";
 import { LogForm } from "@/components/log-form";
 import { NotificationsBell } from "@/components/notifications-bell";
@@ -40,6 +43,7 @@ import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { UserButton } from "@/lib/auth/gates";
 import { APP_NAME, APP_TAGLINE, THEME_STORAGE_KEY } from "@/lib/constants";
 import { isFindOutOpen } from "@/lib/find-out";
+import { isPerkSpendable } from "@/lib/perks";
 import { useLedger } from "@/lib/ledger-context";
 import { cn, daysBetween, formatDate } from "@/lib/utils";
 
@@ -51,6 +55,7 @@ type TabId =
   | "sorry"
   | "rules"
   | "love"
+  | "perks"
   | "quotes"
   | "insights"
   | "findout"
@@ -70,6 +75,7 @@ const MORE_TABS: { id: TabId; label: string; icon: LucideIcon }[] = [
   { id: "sorry", label: "Sorry", icon: Sparkles },
   { id: "rules", label: "Rules", icon: Scale },
   { id: "love", label: "Love", icon: Heart },
+  { id: "perks", label: "Perks", icon: Gift },
   { id: "quotes", label: "Quotes", icon: Quote },
   { id: "insights", label: "Insights", icon: BarChart3 },
   { id: "settings", label: "Settings", icon: Settings },
@@ -83,6 +89,7 @@ export function AppShell() {
     offenses,
     disputes,
     findOuts,
+    perks,
     role,
     displayName,
     email,
@@ -115,6 +122,9 @@ export function AppShell() {
   }, [tab]);
 
   const myOpenFindOuts = findOuts.filter((f) => f.assignedToRole === role && isFindOutOpen(f));
+  const myPerks = perks.filter((p) => p.assignedToRole === role && isPerkSpendable(p));
+  const pendingPerkHonor = perks.filter((p) => p.grantedByRole === role && p.status === "pending");
+  const perkBadgeCount = myPerks.length + pendingPerkHonor.length;
 
   useEffect(() => {
     if (loading || autoRouted || !role) return;
@@ -244,9 +254,11 @@ export function AppShell() {
       </header>
 
       <main className="mx-auto w-full max-w-4xl px-3 py-4 pb-nav sm:px-6 sm:py-6 sm:pb-10">
-        <StatsGrid offenses={offenses} findOuts={findOuts} role={role} />
+        <StatsGrid offenses={offenses} findOuts={findOuts} perks={perks} role={role} />
 
         <FoWarrant onOpen={() => selectTab("findout")} />
+
+        <PerkBank onOpen={() => selectTab("perks")} />
 
         <Tabs value={tab} onValueChange={selectTab} className="mt-4 sm:mt-6">
           {/* Single-row horizontal scroll tabs (tablet/desktop) */}
@@ -271,6 +283,11 @@ export function AppShell() {
                     {id === "findout" && myOpenFindOuts.length > 0 ? (
                       <span className="grid min-h-5 min-w-5 place-items-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-fg">
                         {myOpenFindOuts.length}
+                      </span>
+                    ) : null}
+                    {id === "perks" && perkBadgeCount > 0 ? (
+                      <span className="grid min-h-5 min-w-5 place-items-center rounded-full bg-success px-1 text-[10px] font-bold text-white">
+                        {perkBadgeCount}
                       </span>
                     ) : null}
                   </button>
@@ -302,6 +319,9 @@ export function AppShell() {
           </TabsContent>
           <TabsContent value="love" className="mt-0">
             <CreditsPanel />
+          </TabsContent>
+          <TabsContent value="perks" className="mt-0">
+            <PerksPanel />
           </TabsContent>
           <TabsContent value="quotes" className="mt-0">
             <QuotesPanel />
@@ -361,6 +381,11 @@ export function AppShell() {
                 >
                   <Icon className="size-4 shrink-0" />
                   {label}
+                  {id === "perks" && perkBadgeCount > 0 ? (
+                    <span className="ml-auto grid min-h-5 min-w-5 place-items-center rounded-full bg-success px-1 text-[10px] font-bold text-white">
+                      {perkBadgeCount}
+                    </span>
+                  ) : null}
                 </button>
               );
             })}
