@@ -18,6 +18,8 @@ import {
   deleteQuote as deleteQuoteFn,
   deleteTemplate as deleteTemplateFn,
   getLedger,
+  issueFindOut as issueFindOutFn,
+  resolveFindOut as resolveFindOutFn,
   markNotificationsRead as markNotificationsReadFn,
   purgeForgiven as purgeForgivenFn,
   resolveApology as resolveApologyFn,
@@ -43,6 +45,8 @@ import type {
   Consequence,
   Credit,
   EvidenceItem,
+  FindOut,
+  FindOutStatus,
   Offense,
   OffenseStatus,
   OffenseTemplate,
@@ -71,6 +75,7 @@ type LedgerContextValue = {
   disputes: Dispute[];
   apologies: Apology[];
   consequences: Consequence[];
+  findOuts: FindOut[];
   credits: Credit[];
   quotes: Quote[];
   notifications: AppNotification[];
@@ -89,6 +94,7 @@ type LedgerContextValue = {
     evidence?: EvidenceItem[];
     remorse?: number | null;
     againstRole?: AppRole;
+    findOut?: { title: string; body?: string; dueDate?: string | null };
   }) => Promise<void>;
   updateOffense: (
     id: string,
@@ -151,6 +157,18 @@ type LedgerContextValue = {
     }>,
   ) => Promise<void>;
   deleteConsequence: (id: string) => Promise<void>;
+  issueFindOut: (input: {
+    offenseId?: string | null;
+    title: string;
+    body?: string;
+    assignedToRole?: AppRole;
+    dueDate?: string | null;
+  }) => Promise<void>;
+  resolveFindOut: (input: {
+    id: string;
+    action: "acknowledge" | "serve" | "waive" | "appeal" | "escalate";
+    note?: string;
+  }) => Promise<void>;
   addCredit: (input: {
     date: string;
     title: string;
@@ -250,6 +268,7 @@ export function LedgerProvider({ children }: { children: ReactNode }) {
       disputes: snap?.disputes ?? [],
       apologies: snap?.apologies ?? [],
       consequences: snap?.consequences ?? [],
+      findOuts: snap?.findOuts ?? [],
       credits: snap?.credits ?? [],
       quotes: snap?.quotes ?? [],
       notifications: snap?.notifications ?? [],
@@ -334,6 +353,14 @@ export function LedgerProvider({ children }: { children: ReactNode }) {
       },
       deleteConsequence: async (id) => {
         await deleteConsequenceFn({ data: { id } });
+        await refresh();
+      },
+      issueFindOut: async (input) => {
+        await issueFindOutFn({ data: input });
+        await refresh();
+      },
+      resolveFindOut: async (input) => {
+        await resolveFindOutFn({ data: input });
         await refresh();
       },
       addCredit: async (input) => {

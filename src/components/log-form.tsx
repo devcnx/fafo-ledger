@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Plus, Zap } from "lucide-react";
 import { EvidencePicker } from "@/components/evidence-picker";
@@ -6,7 +6,8 @@ import { SeverityPicker } from "@/components/severity-picker";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input, Label, Textarea } from "@/components/ui/input";
-import { CONTEXT_OPTIONS, MOOD_OPTIONS } from "@/lib/constants";
+import { FIND_OUT_SUGGESTIONS, CONTEXT_OPTIONS, MOOD_OPTIONS } from "@/lib/constants";
+import { addCentralDays } from "@/lib/find-out";
 import { useLedger } from "@/lib/ledger-context";
 import type { EvidenceItem, Severity } from "@/lib/types";
 import { centralLocalToIso, toLocalDatetimeValue } from "@/lib/utils";
@@ -15,7 +16,7 @@ function toggle<T>(list: T[], item: T, set: (v: T[]) => void) {
   set(list.includes(item) ? list.filter((x) => x !== item) : [...list, item]);
 }
 
-export function LogForm({ onLogged }: { onLogged?: () => void }) {
+export function LogForm({ onLogged }: { onLogged?: (result: { findOut: boolean }) => void }) {
   const { addOffense, categories, profile, role, settings, templates } = useLedger();
   const againstRole = role === "tracker" ? "subject" : "tracker";
   const otherName =
@@ -33,6 +34,21 @@ export function LogForm({ onLogged }: { onLogged?: () => void }) {
   const [evidence, setEvidence] = useState<EvidenceItem[]>([]);
   const [remorse, setRemorse] = useState<number | "">("");
   const [saving, setSaving] = useState(false);
+  const [foTitle, setFoTitle] = useState("");
+  const [foBody, setFoBody] = useState("");
+  const [foDue, setFoDue] = useState("");
+  const [includeFo, setIncludeFo] = useState(true);
+  const [foCustomized, setFoCustomized] = useState(false);
+
+  useEffect(() => {
+    if (foCustomized) return;
+    const s = FIND_OUT_SUGGESTIONS[severity][0];
+    if (!s) return;
+    setFoTitle(s.title);
+    setFoBody(s.body);
+    setFoDue(addCentralDays(s.dueDays));
+  }, [severity, foCustomized]);
+
 
   const usableTemplates = useMemo(
     () =>
@@ -63,6 +79,10 @@ export function LogForm({ onLogged }: { onLogged?: () => void }) {
       toast.error("Write What Happened — Receipts Matter.");
       return;
     }
+    if (includeFo && !foTitle.trim()) {
+      toast.error("Name The Find Out — Or Uncheck Issue It.");
+      return;
+    }
     setSaving(true);
     try {
       await addOffense({
@@ -77,8 +97,13 @@ export function LogForm({ onLogged }: { onLogged?: () => void }) {
         evidence,
         remorse: remorse === "" ? null : Number(remorse),
         againstRole,
+        findOut:
+          includeFo && foTitle.trim()
+            ? { title: foTitle.trim(), body: foBody.trim(), dueDate: foDue || null }
+            : undefined,
       });
-      toast.success("Logged. Receipt Filed.");
+      const issuedFo = Boolean(includeFo && foTitle.trim());
+      toast.success(issuedFo ? "Logged. Find Out Issued." : "Logged. Receipt Filed.");
       setTitle("");
       setDescription("");
       setImpact("");
@@ -88,8 +113,12 @@ export function LogForm({ onLogged }: { onLogged?: () => void }) {
       setContexts([]);
       setEvidence([]);
       setRemorse("");
+      setFoCustomized(false);
+      setFoTitle("");
+      setFoBody("");
+      setFoDue("");
       setDate(toLocalDatetimeValue());
-      onLogged?.();
+      onLogged?.({ findOut: issuedFo });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could Not Save");
     } finally {
@@ -102,8 +131,8 @@ export function LogForm({ onLogged }: { onLogged?: () => void }) {
       <CardHeader>
         <CardTitle>Log An Offense</CardTitle>
         <CardDescription>
-          Document What <strong>{otherName.split(" ")[0]}</strong> Did. Both Of You Can Log. They
-          Can Dispute. Times Are Central.
+          Document What <strong>{otherName.split(" ")[0]}</strong> Did. Then Issue The Find Out.
+          Both Of You Can Log. They Can Dispute. Times Are Central.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -270,9 +299,88 @@ export function LogForm({ onLogged }: { onLogged?: () => void }) {
             </select>
           </div>
 
+          <div className="rounded-xl border border-primary/25 bg-primary-soft/40 p-3 sm:p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <Label className="mb-0">The Find Out</Label>
+                <p className="mt-1 text-sm text-fg-muted">
+                  FA Without FO Is Just a Diary. Sentence {otherName.split(" ")[0]}.
+                </p>
+              </div>
+              <label className="inline-flex min-h-11 shrink-0 items-center gap-2 text-sm font-medium">
+                <input
+                  type="checkbox"
+                  checked={includeFo}
+                  onChange={(e) => setIncludeFo(e.target.checked)}
+                  className="size-4 rounded border-border"
+                />
+                Issue It
+              </label>
+            </div>
+            {includeFo ? (
+              <div className="mt-3 space-y-3">
+                <div className="flex flex-wrap gap-1.5">
+                  {FIND_OUT_SUGGESTIONS[severity].map((s) => (
+                    <button
+                      key={s.title}
+                      type="button"
+                      onClick={() => {
+                        setFoCustomized(true);
+                        setFoTitle(s.title);
+                        setFoBody(s.body);
+                        setFoDue(addCentralDays(s.dueDays));
+                      }}
+                      className="inline-flex min-h-9 items-center rounded-full border border-border bg-bg-elevated px-2.5 py-1.5 text-xs font-medium text-fg-muted hover:border-primary hover:text-primary"
+                    >
+                      {s.title}
+                    </button>
+                  ))}
+                </div>
+                <div>
+                  <Label htmlFor="fo-title">Sentence</Label>
+                  <Input
+                    id="fo-title"
+                    value={foTitle}
+                    onChange={(e) => {
+                      setFoCustomized(true);
+                      setFoTitle(e.target.value);
+                    }}
+                    placeholder="What They Have To Do"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="fo-body">Details</Label>
+                  <Textarea
+                    id="fo-body"
+                    value={foBody}
+                    onChange={(e) => {
+                      setFoCustomized(true);
+                      setFoBody(e.target.value);
+                    }}
+                    placeholder="Spell Out The Find Out."
+                    className="min-h-16"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="fo-due">Due (Central)</Label>
+                  <Input
+                    id="fo-due"
+                    type="date"
+                    value={foDue}
+                    onChange={(e) => setFoDue(e.target.value)}
+                  />
+                </div>
+              </div>
+            ) : null}
+          </div>
+
           <Button type="submit" size="lg" className="w-full" disabled={saving}>
             <Plus className="size-4" />
-            {saving ? "Saving…" : `Add To Ledger (Against ${otherName.split(" ")[0]})`}
+            {saving
+              ? "Saving…"
+              : includeFo && foTitle.trim()
+                ? `Log FA + Serve FO (${otherName.split(" ")[0]})`
+                : `Add To Ledger (Against ${otherName.split(" ")[0]})`}
           </Button>
         </form>
       </CardContent>

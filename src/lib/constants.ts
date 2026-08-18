@@ -120,3 +120,70 @@ export const APP_TAGLINE = "Fuck Around And Find Out — With Receipts.";
 
 export const PIN_STORAGE_KEY = "fafo-pin-hash-v1";
 export const THEME_STORAGE_KEY = "fafo-theme-v1";
+
+/** Suggested Find Outs by severity. FA without FO is just a diary. */
+export const FIND_OUT_SUGGESTIONS: Record<
+  Severity,
+  { title: string; body: string; dueDays: number }[]
+> = {
+  1: [
+    {
+      title: "Text First Next Time. No Exceptions.",
+      body: "You Fucked Around Mildly. Find Out: Heads-Up Before You're Late, Every Time.",
+      dueDays: 1,
+    },
+    {
+      title: "Do The Small Thing You Left.",
+      body: "Finish What You Walked Away From. Tonight.",
+      dueDays: 1,
+    },
+  ],
+  2: [
+    {
+      title: "Dishes + Kitchen Reset Tonight.",
+      body: "You Left The Mess. You Clear It. Counters Too.",
+      dueDays: 1,
+    },
+    {
+      title: "Phone Away For The Next Quality Hour.",
+      body: "Face Up. Notifications Off. You Stay In The Room.",
+      dueDays: 2,
+    },
+  ],
+  3: [
+    {
+      title: "Cook Dinner This Week. Their Menu.",
+      body: "You Pissed Them Off. Find Out: You Shop, Cook, And Clean After.",
+      dueDays: 7,
+    },
+    {
+      title: "Plan A Make-Up Night. You Handle Logistics.",
+      body: "Date, Time, Place. No “Whatever You Want.” You Decide And Follow Through.",
+      dueDays: 7,
+    },
+  ],
+  4: [
+    {
+      title: "Full Written Reckoning + One Concrete Fix.",
+      body: "What You Did. Why It Landed. What Changes Starting Now. Then Do The Fix.",
+      dueDays: 3,
+    },
+    {
+      title: "Weekend Plan Of Their Choosing. You Fund And Drive.",
+      body: "Slap-Level FA Gets A Real FO. They Pick. You Execute. No Negotiation On The Vibe.",
+      dueDays: 14,
+    },
+  ],
+  5: [
+    {
+      title: "Nuclear Reset: Grand Gesture They Name.",
+      body: "You Went Nuclear. Find Out Is Whatever They Say It Is. Due When They Say.",
+      dueDays: 7,
+    },
+    {
+      title: "Overnight Accountability: You Own The Next 48 Hours.",
+      body: "Schedule, Chores, Kids, Food, Follow-Through. They Rest. You Don't Make It About You.",
+      dueDays: 2,
+    },
+  ],
+};

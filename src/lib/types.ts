@@ -120,6 +120,30 @@ export type AppNotification = {
   createdAt: string;
 };
 
+export type FindOutStatus =
+  | "issued"
+  | "acknowledged"
+  | "served"
+  | "waived"
+  | "appealed";
+
+export type FindOut = {
+  id: string;
+  offenseId: string | null;
+  title: string;
+  body: string;
+  issuedByRole: AppRole;
+  issuedByEmail: string;
+  assignedToRole: AppRole;
+  status: FindOutStatus;
+  dueDate: string | null;
+  acknowledgedAt: string | null;
+  servedAt: string | null;
+  escalationNote: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type OffenseTemplate = {
   id: string;
   title: string;

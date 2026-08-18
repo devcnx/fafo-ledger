@@ -8,7 +8,7 @@ import { selectStats } from "@/lib/store";
 import { daysBetween, formatDate, formatDateTime } from "@/lib/utils";
 
 export function FafoReport() {
-  const { profile, offenses, disputes, role, settings } = useLedger();
+  const { profile, offenses, disputes, findOuts, role, settings } = useLedger();
   const stats = selectStats(offenses, role);
 
   const open = offenses
@@ -45,11 +45,16 @@ export function FafoReport() {
           </p>
           <div className="mt-4 flex flex-wrap gap-2">
             <Badge className="border-0 bg-primary-fg/15 text-primary-fg">
-              {stats.total} Total
+              {stats.total} FA Logged
             </Badge>
-            <Badge className="border-0 bg-primary-fg/15 text-primary-fg">{stats.open} Open</Badge>
             <Badge className="border-0 bg-primary-fg/15 text-primary-fg">
-              Avg {stats.total ? stats.avg.toFixed(1) : "—"}
+              {findOuts.length} FO Issued
+            </Badge>
+            <Badge className="border-0 bg-primary-fg/15 text-primary-fg">
+              {findOuts.filter((f) => f.status === "served").length} FO Served
+            </Badge>
+            <Badge className="border-0 bg-primary-fg/15 text-primary-fg">
+              {stats.open} Open FA
             </Badge>
             <Badge className="border-0 bg-primary-fg/15 text-primary-fg">
               {togetherDays} Days Together
@@ -74,9 +79,10 @@ export function FafoReport() {
         </CardHeader>
         <CardContent className="space-y-2 text-sm text-fg">
           <p>
-            This packet documents <strong>{stats.total}</strong> logged offense
-            {stats.total === 1 ? "" : "s"} on the household ledger, of which{" "}
-            <strong>{stats.open}</strong> remain open.{" "}
+            This packet documents <strong>{stats.total}</strong> logged fuck-around
+            {stats.total === 1 ? "" : "s"} and <strong>{findOuts.length}</strong> Find Out
+            {findOuts.length === 1 ? "" : "s"} on the household ledger.{" "}
+            <strong>{stats.open}</strong> FA remain open.{" "}
             {stats.thisMonth > 0
               ? `${stats.thisMonth} landed this calendar month (Central).`
               : "None this calendar month (Central)."}{" "}
@@ -90,6 +96,23 @@ export function FafoReport() {
               ruling.
             </p>
           ) : null}
+          {findOuts.filter((f) => f.status === "issued" || f.status === "acknowledged").length >
+          0 ? (
+            <p>
+              <strong>
+                {
+                  findOuts.filter((f) => f.status === "issued" || f.status === "acknowledged")
+                    .length
+                }
+              </strong>{" "}
+              Find Out{findOuts.filter((f) => f.status === "issued" || f.status === "acknowledged").length === 1 ? "" : "s"} still outstanding. FA without serving FO is unfinished business.
+            </p>
+          ) : findOuts.length === 0 && stats.total > 0 ? (
+            <p className="text-warn">
+              Offenses on file, zero Find Outs issued. The coworker is right — this packet is all
+              FA and no FO.
+            </p>
+          ) : null}
           {stats.total === 0 ? (
             <p className="text-fg-muted">
               No Offenses on File. Either Angel Mode or Logging Hasn’t Started.
@@ -97,6 +120,43 @@ export function FafoReport() {
           ) : null}
         </CardContent>
       </Card>
+
+      {findOuts.length > 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Find Outs On The Record</CardTitle>
+            <CardDescription>The Bill For The Fuck Around.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {findOuts.map((f) => (
+              <div key={f.id} className="rounded-lg border border-border p-3 text-sm">
+                <div className="flex flex-wrap gap-2">
+                  <Badge
+                    variant={
+                      f.status === "served" ? "success" : f.status === "waived" ? "muted" : "danger"
+                    }
+                  >
+                    {f.status === "issued"
+                      ? "Issued"
+                      : f.status === "acknowledged"
+                        ? "Acknowledged"
+                        : f.status === "served"
+                          ? "Served"
+                          : f.status === "waived"
+                            ? "Waived"
+                            : "Appealed"}
+                  </Badge>
+                  <span className="font-medium">{f.title}</span>
+                </div>
+                {f.body ? <p className="mt-1 text-fg-muted">{f.body}</p> : null}
+                {f.dueDate ? (
+                  <p className="mt-1 text-xs text-fg-subtle">Due {formatDate(f.dueDate)}</p>
+                ) : null}
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      ) : null}
 
       {open.length > 0 ? (
         <Card>

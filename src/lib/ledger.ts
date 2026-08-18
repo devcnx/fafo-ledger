@@ -7,6 +7,7 @@ import {
   type AppRole,
   type HouseholdMode,
 } from "@/lib/roles";
+import { addCentralDays } from "@/lib/find-out";
 import type {
   Apology,
   AppNotification,
@@ -14,6 +15,8 @@ import type {
   Consequence,
   Credit,
   EvidenceItem,
+  FindOut,
+  FindOutStatus,
   Offense,
   OffenseStatus,
   OffenseTemplate,
@@ -59,6 +62,7 @@ export type LedgerSnapshot = {
   disputes: Dispute[];
   apologies: Apology[];
   consequences: Consequence[];
+  findOuts: FindOut[];
   credits: Credit[];
   quotes: Quote[];
   notifications: AppNotification[];
@@ -351,6 +355,25 @@ function mapTemplate(row: Record<string, unknown>): OffenseTemplate {
   };
 }
 
+function mapFindOut(row: Record<string, unknown>): FindOut {
+  return {
+    id: String(row.id),
+    offenseId: row.offense_id == null ? null : String(row.offense_id),
+    title: String(row.title),
+    body: String(row.body ?? ""),
+    issuedByRole: String(row.issued_by_role) as AppRole,
+    issuedByEmail: String(row.issued_by_email),
+    assignedToRole: String(row.assigned_to_role) as AppRole,
+    status: String(row.status) as FindOutStatus,
+    dueDate: row.due_date == null || row.due_date === "" ? null : String(row.due_date).slice(0, 10),
+    acknowledgedAt: row.acknowledged_at == null ? null : new Date(String(row.acknowledged_at)).toISOString(),
+    servedAt: row.served_at == null ? null : new Date(String(row.served_at)).toISOString(),
+    escalationNote: String(row.escalation_note ?? ""),
+    createdAt: new Date(String(row.created_at)).toISOString(),
+    updatedAt: new Date(String(row.updated_at)).toISOString(),
+  };
+}
+
 const evidenceSchema = z.array(
   z.object({
     id: z.string(),
@@ -394,6 +417,7 @@ export const getLedger = createServerFn({ method: "GET" })
         disputes: [],
         apologies: [],
         consequences: [],
+        findOuts: [],
         credits: [],
         quotes: [],
         notifications: [],
@@ -434,6 +458,7 @@ export const getLedger = createServerFn({ method: "GET" })
       disputeRows,
       apologyRows,
       consequenceRows,
+      findOutRows,
       creditRows,
       quoteRows,
       notifRows,
@@ -444,6 +469,7 @@ export const getLedger = createServerFn({ method: "GET" })
       sql<Record<string, unknown>>`select * from disputes where household_id = ${hh} order by created_at desc`,
       sql<Record<string, unknown>>`select * from apologies where household_id = ${hh} order by created_at desc`,
       sql<Record<string, unknown>>`select * from consequences where household_id = ${hh} order by created_at desc`,
+      sql<Record<string, unknown>>`select * from find_outs where household_id = ${hh} order by created_at desc`,
       sql<Record<string, unknown>>`select * from credits where household_id = ${hh} order by date desc`,
       sql<Record<string, unknown>>`select * from quotes where household_id = ${hh} order by pinned desc, created_at desc`,
       sql<Record<string, unknown>>`
@@ -472,6 +498,7 @@ export const getLedger = createServerFn({ method: "GET" })
       disputes: disputeRows.map(mapDispute),
       apologies: apologyRows.map(mapApology),
       consequences: consequenceRows.map(mapConsequence),
+      findOuts: findOutRows.map(mapFindOut),
       credits: creditRows.map(mapCredit),
       quotes: quoteRows.map(mapQuote),
       notifications: notifRows.map(mapNotif),
@@ -493,6 +520,13 @@ const offenseInput = z.object({
   evidence: evidenceSchema.optional(),
   remorse: z.number().int().min(1).max(5).nullable().optional(),
   againstRole: z.enum(["tracker", "subject"]).optional(),
+  findOut: z
+    .object({
+      title: z.string().min(1).max(200),
+      body: z.string().optional(),
+      dueDate: z.string().nullable().optional(),
+    })
+    .optional(),
 });
 
 export const addOffense = createServerFn({ method: "POST" })
@@ -557,6 +591,40 @@ export const addOffense = createServerFn({ method: "POST" })
         "history",
         who.householdId,
       );
+    }
+    if (data.findOut?.title.trim()) {
+      const foId = uid();
+      await sql`
+        insert into find_outs (
+          id, household_id, offense_id, title, body, issued_by_role, issued_by_email,
+          assigned_to_role, status, due_date, escalation_note, created_at, updated_at
+        ) values (
+          ${foId},
+          ${who.householdId},
+          ${id},
+          ${data.findOut.title.trim()},
+          ${(data.findOut.body ?? "").trim()},
+          ${who.role},
+          ${who.email},
+          ${againstRole},
+          ${"issued"},
+          ${data.findOut.dueDate || null},
+          ${""},
+          ${now},
+          ${now}
+        )
+      `;
+      if (targetEmail) {
+        await notify(
+          sql,
+          targetEmail,
+          "You Found Out",
+          data.findOut.title.trim(),
+          "findout",
+          "findout",
+          who.householdId,
+        );
+      }
     }
     return { id };
   });
@@ -1575,3 +1643,158 @@ export const regenerateInviteCode = createServerFn({ method: "POST" })
     `;
     return { inviteCode: code };
   });
+
+const issueFindOutInput = z.object({
+  offenseId: z.string().nullable().optional(),
+  title: z.string().min(1).max(200),
+  body: z.string().optional(),
+  assignedToRole: z.enum(["tracker", "subject"]).optional(),
+  dueDate: z.string().nullable().optional(),
+});
+
+export const issueFindOut = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((data: unknown) => issueFindOutInput.parse(data))
+  .handler(async ({ context, data }) => {
+    const { ensureSeedUsers } = await import("@/lib/seed.server");
+    const { getSql } = await import("@/lib/db");
+    await ensureSeedUsers();
+    const who = await requireHousehold(context.userId);
+    const assigned = data.assignedToRole ?? (who.role === "tracker" ? "subject" : "tracker");
+    if (assigned === who.role) {
+      throw new Error("You Issue The Find Out To The Other Person.");
+    }
+    const sql = await getSql();
+    const id = uid();
+    const now = new Date().toISOString();
+    await sql`
+      insert into find_outs (
+        id, household_id, offense_id, title, body, issued_by_role, issued_by_email,
+        assigned_to_role, status, due_date, escalation_note, created_at, updated_at
+      ) values (
+        ${id},
+        ${who.householdId},
+        ${data.offenseId ?? null},
+        ${data.title.trim()},
+        ${(data.body ?? "").trim()},
+        ${who.role},
+        ${who.email},
+        ${assigned},
+        ${"issued"},
+        ${data.dueDate || null},
+        ${""},
+        ${now},
+        ${now}
+      )
+    `;
+    const targetEmail = await partnerEmailInHousehold(who.householdId, who.role);
+    if (targetEmail) {
+      await notify(
+        sql,
+        targetEmail,
+        "You Found Out",
+        data.title.trim(),
+        "findout",
+        "findout",
+        who.householdId,
+      );
+    }
+    return { id };
+  });
+
+const resolveFindOutInput = z.object({
+  id: z.string(),
+  action: z.enum(["acknowledge", "serve", "waive", "appeal", "escalate"]),
+  note: z.string().optional(),
+});
+
+export const resolveFindOut = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((data: unknown) => resolveFindOutInput.parse(data))
+  .handler(async ({ context, data }) => {
+    const { ensureSeedUsers } = await import("@/lib/seed.server");
+    const { getSql } = await import("@/lib/db");
+    await ensureSeedUsers();
+    const who = await requireHousehold(context.userId);
+    const sql = await getSql();
+    const rows = await sql<Record<string, unknown>>`
+      select * from find_outs where id = ${data.id} and household_id = ${who.householdId} limit 1
+    `;
+    if (!rows[0]) throw new Error("Find Out Not Found.");
+    const assigned = String(rows[0].assigned_to_role);
+    const issuer = String(rows[0].issued_by_role);
+    const now = new Date().toISOString();
+    const action = data.action;
+
+    if (action === "acknowledge") {
+      if (who.role !== assigned) throw new Error("Only The Person Who Found Out Can Acknowledge.");
+      await sql`
+        update find_outs
+        set status = 'acknowledged', acknowledged_at = ${now}, updated_at = ${now}
+        where id = ${data.id}
+      `;
+    } else if (action === "serve") {
+      if (who.role !== assigned && who.role !== issuer) {
+        throw new Error("Only The Parties On This Find Out Can Mark It Served.");
+      }
+      await sql`
+        update find_outs
+        set status = 'served', served_at = ${now}, updated_at = ${now}
+        where id = ${data.id}
+      `;
+    } else if (action === "waive") {
+      if (who.role !== issuer && !who.isOwner) throw new Error("Only The Issuer Can Waive.");
+      await sql`
+        update find_outs
+        set status = 'waived', updated_at = ${now}
+        where id = ${data.id}
+      `;
+    } else if (action === "appeal") {
+      if (who.role !== assigned) throw new Error("Only The Assigned Partner Can Appeal.");
+      await sql`
+        update find_outs
+        set status = 'appealed',
+            escalation_note = ${data.note?.trim() || "Appealed."},
+            updated_at = ${now}
+        where id = ${data.id}
+      `;
+    } else if (action === "escalate") {
+      if (who.role !== issuer && !who.isOwner) throw new Error("Only The Issuer Can Escalate.");
+      const note = data.note?.trim() || "Escalated. The Find Out Got Worse.";
+      const currentDue =
+        rows[0].due_date == null || rows[0].due_date === ""
+          ? null
+          : String(rows[0].due_date).slice(0, 10);
+      const nextDue = addCentralDays(7, currentDue);
+      await sql`
+        update find_outs
+        set escalation_note = ${note},
+            status = 'issued',
+            due_date = ${nextDue},
+            updated_at = ${now}
+        where id = ${data.id}
+      `;
+    }
+    const other = await partnerEmailInHousehold(who.householdId, who.role);
+    if (other) {
+      await notify(
+        sql,
+        other,
+        action === "acknowledge"
+          ? "Find Out Acknowledged"
+          : action === "serve"
+            ? "Find Out Served"
+            : action === "waive"
+              ? "Find Out Waived"
+              : action === "appeal"
+                ? "Find Out Appealed"
+                : "Find Out Escalated",
+        String(rows[0].title),
+        "findout",
+        "findout",
+        who.householdId,
+      );
+    }
+    return { ok: true };
+  });
+

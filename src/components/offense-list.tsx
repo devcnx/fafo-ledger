@@ -14,6 +14,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input, Label, Textarea } from "@/components/ui/input";
+import { FIND_OUT_SUGGESTIONS } from "@/lib/constants";
+import { addCentralDays, findOutBadgeVariant, findOutStatusLabel, isFindOutOpen } from "@/lib/find-out";
 import type { Dispute } from "@/lib/ledger";
 import { useLedger } from "@/lib/ledger-context";
 import type { EvidenceItem, Offense, OffenseStatus, Severity } from "@/lib/types";
@@ -35,12 +37,14 @@ export function OffenseList() {
     profile,
     settings,
     email,
+    findOuts,
     deleteOffense,
     setStatus,
     updateOffense,
     submitDispute,
     resolveDispute,
     withdrawDispute,
+    issueFindOut,
   } = useLedger();
 
   const [query, setQuery] = useState("");
@@ -51,6 +55,10 @@ export function OffenseList() {
   const [editing, setEditing] = useState<Offense | null>(null);
   const [disputing, setDisputing] = useState<Offense | null>(null);
   const [resolving, setResolving] = useState<Dispute | null>(null);
+  const [sentencing, setSentencing] = useState<Offense | null>(null);
+  const [foTitle, setFoTitle] = useState("");
+  const [foBody, setFoBody] = useState("");
+  const [foDue, setFoDue] = useState("");
 
   const disputesByOffense = useMemo(() => {
     const map = new Map<string, Dispute[]>();
@@ -214,6 +222,8 @@ export function OffenseList() {
             {filtered.map((o) => {
               const itemDisputes = disputesByOffense.get(o.id) ?? [];
               const pending = itemDisputes.filter((d) => d.status === "pending");
+              const linkedFo = findOuts.filter((f) => f.offenseId === o.id);
+              const openFo = linkedFo.filter(isFindOutOpen);
               return (
                 <li
                   key={o.id}
@@ -274,6 +284,24 @@ export function OffenseList() {
                     </div>
                   )}
                   <EvidenceList items={o.evidence} />
+
+                  {linkedFo.length > 0 ? (
+                    <div className="mt-3 space-y-1.5 rounded-lg border border-primary/25 bg-primary-soft/30 p-3">
+                      <p className="text-xs font-semibold tracking-wide text-primary uppercase">
+                        The Find Out
+                      </p>
+                      {linkedFo.map((f) => (
+                        <div key={f.id} className="flex flex-wrap items-center gap-2 text-sm">
+                          <Badge variant={findOutBadgeVariant(f)}>
+                            {findOutStatusLabel(f.status)}
+                          </Badge>
+                          <span className="font-medium text-fg">{f.title}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : o.status === "open" && !o.archived ? (
+                    <p className="mt-3 text-xs font-medium text-warn">FA Without FO — Issue A Sentence.</p>
+                  ) : null}
 
                   {itemDisputes.length > 0 ? (
                     <div className="mt-3 space-y-2 rounded-lg border border-border bg-bg-elevated p-3">
@@ -341,6 +369,22 @@ export function OffenseList() {
                   ) : null}
 
                   <div className="mt-3 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:justify-end">
+                    {isAuthor(o) && o.status === "open" && openFo.length === 0 ? (
+                      <Button
+                        variant="soft"
+                        size="sm"
+                        onClick={() => {
+                          const s = FIND_OUT_SUGGESTIONS[o.severity][0];
+                          setFoTitle(s?.title ?? "");
+                          setFoBody(s?.body ?? "");
+                          setFoDue(addCentralDays(s?.dueDays ?? 7));
+                          setSentencing(o);
+                        }}
+                      >
+                        <Gavel className="size-3.5" />
+                        Issue Find Out
+                      </Button>
+                    ) : null}
                     {canDispute(o) ? (
                       <Button variant="soft" size="sm" onClick={() => setDisputing(o)}>
                         <Gavel className="size-3.5" />
@@ -406,6 +450,78 @@ export function OffenseList() {
           </ul>
         )}
       </CardContent>
+
+      <Dialog open={Boolean(sentencing)} onOpenChange={(v) => !v && setSentencing(null)}>
+        {sentencing ? (
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Issue Find Out</DialogTitle>
+              <DialogDescription>
+                Sentence For “{sentencing.title}”. This Is the FO.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div className="flex flex-wrap gap-1.5">
+                {FIND_OUT_SUGGESTIONS[sentencing.severity].map((s) => (
+                  <button
+                    key={s.title}
+                    type="button"
+                    onClick={() => {
+                      setFoTitle(s.title);
+                      setFoBody(s.body);
+                      setFoDue(addCentralDays(s.dueDays));
+                    }}
+                    className="inline-flex min-h-9 items-center rounded-full border border-border bg-bg-elevated px-2.5 py-1.5 text-xs font-medium text-fg-muted hover:border-primary hover:text-primary"
+                  >
+                    {s.title}
+                  </button>
+                ))}
+              </div>
+              <div>
+                <Label>The Sentence</Label>
+                <Input value={foTitle} onChange={(e) => setFoTitle(e.target.value)} />
+              </div>
+              <div>
+                <Label>Details</Label>
+                <Textarea
+                  value={foBody}
+                  onChange={(e) => setFoBody(e.target.value)}
+                  className="min-h-16"
+                />
+              </div>
+              <div>
+                <Label>Due (Central)</Label>
+                <Input type="date" value={foDue} onChange={(e) => setFoDue(e.target.value)} />
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="secondary" type="button" onClick={() => setSentencing(null)}>
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  onClick={async () => {
+                    if (!foTitle.trim()) return toast.error("Name The Find Out.");
+                    try {
+                      await issueFindOut({
+                        offenseId: sentencing.id,
+                        title: foTitle.trim(),
+                        body: foBody.trim(),
+                        dueDate: foDue || null,
+                      });
+                      setSentencing(null);
+                      toast.success("Find Out Issued.");
+                    } catch (e) {
+                      toast.error(e instanceof Error ? e.message : "Could Not Issue Find Out");
+                    }
+                  }}
+                >
+                  Serve Notice
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        ) : null}
+      </Dialog>
 
       <Dialog open={Boolean(editing)} onOpenChange={(v) => !v && setEditing(null)}>
         {editing ? (

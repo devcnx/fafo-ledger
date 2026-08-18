@@ -1,37 +1,61 @@
 import { selectStats } from "@/lib/store";
 import type { AppRole } from "@/lib/roles";
-import type { Offense } from "@/lib/types";
+import type { FindOut, Offense } from "@/lib/types";
 import { Card } from "@/components/ui/card";
+import { isFindOutOpen, isFindOutOverdue } from "@/lib/find-out";
+import { cn } from "@/lib/utils";
 
 export function StatsGrid({
   offenses,
+  findOuts = [],
   role,
 }: {
   offenses: Offense[];
+  findOuts?: FindOut[];
   role?: AppRole | null;
 }) {
   const s = selectStats(offenses, role);
+  const foOpen = findOuts.filter(isFindOutOpen).length;
+  const foLate = findOuts.filter(isFindOutOverdue).length;
+  const foServed = findOuts.filter((f) => f.status === "served").length;
+  const faWithoutFo = offenses.filter(
+    (o) => !o.archived && o.status === "open" && !findOuts.some((f) => f.offenseId === o.id),
+  ).length;
 
   const items = [
-    { label: "Total", full: "Total Offenses", value: String(s.total) },
-    { label: "Open", full: "Open Cases", value: String(s.open) },
-    { label: "Month", full: "This Month", value: String(s.thisMonth) },
-    { label: "Week", full: "This Week", value: String(s.thisWeek) },
-    { label: "Avg Sev", full: "Avg Severity", value: s.total ? s.avg.toFixed(1) : "—" },
+    { label: "FA", full: "Fuck Arounds Logged", value: String(s.total), tone: "default" as const },
+    { label: "FO Due", full: "Find Outs Open", value: String(foOpen), tone: foOpen ? ("primary" as const) : ("default" as const) },
+    { label: "FO Late", full: "Find Outs Overdue", value: String(foLate), tone: foLate ? ("danger" as const) : ("default" as const) },
+    { label: "Served", full: "Find Outs Served", value: String(foServed), tone: foServed ? ("success" as const) : ("default" as const) },
+    { label: "No FO", full: "Open FA Without FO", value: String(faWithoutFo), tone: faWithoutFo ? ("warn" as const) : ("default" as const) },
+    { label: "Avg Sev", full: "Avg Severity", value: s.total ? s.avg.toFixed(1) : "—", tone: "default" as const },
     {
       label: "Peace",
       full: "Days of Peace",
       value: s.daysSinceLast === null ? "∞" : String(s.daysSinceLast),
+      tone: "default" as const,
     },
-    { label: "Slap+", full: "Slap+ Level", value: String(s.slap) },
-    { label: "Nuke", full: "Nuclear", value: String(s.nuclear) },
+    { label: "Nuke", full: "Nuclear", value: String(s.nuclear), tone: s.nuclear ? ("danger" as const) : ("default" as const) },
   ];
 
   return (
-    <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-4 sm:gap-3">
+    <div className="mb-4 grid grid-cols-4 gap-1.5 sm:gap-3">
       {items.map((item) => (
-        <Card key={item.full} className="px-2 py-2.5 sm:px-4 sm:py-4">
-          <div className="font-display text-xl font-semibold tabular-nums tracking-tight text-primary sm:text-3xl">
+        <Card
+          key={item.full}
+          className={cn(
+            "px-2 py-2.5 sm:px-4 sm:py-4",
+            item.tone === "danger" && "border-danger/40",
+            item.tone === "primary" && "border-primary/40",
+            item.tone === "warn" && "border-warn/40",
+          )}
+        >
+          <div
+            className={cn(
+              "font-display text-xl font-semibold tabular-nums tracking-tight sm:text-3xl",
+              item.tone === "danger" ? "text-danger" : item.tone === "success" ? "text-success" : "text-primary",
+            )}
+          >
             {item.value}
           </div>
           <div

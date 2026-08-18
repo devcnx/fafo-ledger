@@ -24,7 +24,9 @@ import {
   CreditsPanel,
   QuotesPanel,
 } from "@/components/household-hub";
+import { FindOutPanel } from "@/components/find-out-panel";
 import { FafoReport } from "@/components/fafo-report";
+import { FoWarrant } from "@/components/fo-warrant";
 import { Insights } from "@/components/insights";
 import { LogForm } from "@/components/log-form";
 import { NotificationsBell } from "@/components/notifications-bell";
@@ -37,6 +39,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { UserButton } from "@/lib/auth/gates";
 import { APP_NAME, APP_TAGLINE, THEME_STORAGE_KEY } from "@/lib/constants";
+import { isFindOutOpen } from "@/lib/find-out";
 import { useLedger } from "@/lib/ledger-context";
 import { cn, daysBetween, formatDate } from "@/lib/utils";
 
@@ -50,17 +53,19 @@ type TabId =
   | "love"
   | "quotes"
   | "insights"
+  | "findout"
   | "fafo"
   | "settings";
 
 const PRIMARY_TABS: { id: TabId; label: string; icon: LucideIcon }[] = [
   { id: "log", label: "Log", icon: BookOpen },
   { id: "history", label: "History", icon: ScrollText },
-  { id: "board", label: "Board", icon: LayoutDashboard },
+  { id: "findout", label: "Find Out", icon: Gavel },
   { id: "fafo", label: "FAFO", icon: FileWarning },
 ];
 
 const MORE_TABS: { id: TabId; label: string; icon: LucideIcon }[] = [
+  { id: "board", label: "Board", icon: LayoutDashboard },
   { id: "case", label: "Case", icon: Briefcase },
   { id: "sorry", label: "Sorry", icon: Sparkles },
   { id: "rules", label: "Rules", icon: Scale },
@@ -77,6 +82,7 @@ export function AppShell() {
     profile,
     offenses,
     disputes,
+    findOuts,
     role,
     displayName,
     email,
@@ -90,6 +96,7 @@ export function AppShell() {
   } = useLedger();
   const [tab, setTab] = useState<string>("log");
   const [moreOpen, setMoreOpen] = useState(false);
+  const [autoRouted, setAutoRouted] = useState(false);
 
   useEffect(() => {
     const t = (localStorage.getItem(THEME_STORAGE_KEY) as "light" | "dark" | "system") || "system";
@@ -106,6 +113,14 @@ export function AppShell() {
     const el = document.querySelector<HTMLElement>(`[data-tab-id="${tab}"]`);
     el?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
   }, [tab]);
+
+  const myOpenFindOuts = findOuts.filter((f) => f.assignedToRole === role && isFindOutOpen(f));
+
+  useEffect(() => {
+    if (loading || autoRouted || !role) return;
+    if (myOpenFindOuts.length > 0) setTab("findout");
+    setAutoRouted(true);
+  }, [loading, role, autoRouted, myOpenFindOuts.length]);
 
   const together = daysBetween(profile.anniversary);
   const pendingDisputes = disputes.filter((d) => d.status === "pending").length;
@@ -229,7 +244,9 @@ export function AppShell() {
       </header>
 
       <main className="mx-auto w-full max-w-4xl px-3 py-4 pb-nav sm:px-6 sm:py-6 sm:pb-10">
-        <StatsGrid offenses={offenses} role={role} />
+        <StatsGrid offenses={offenses} findOuts={findOuts} role={role} />
+
+        <FoWarrant onOpen={() => selectTab("findout")} />
 
         <Tabs value={tab} onValueChange={selectTab} className="mt-4 sm:mt-6">
           {/* Single-row horizontal scroll tabs (tablet/desktop) */}
@@ -251,6 +268,11 @@ export function AppShell() {
                   >
                     <Icon className="size-3.5 shrink-0" />
                     <span>{label}</span>
+                    {id === "findout" && myOpenFindOuts.length > 0 ? (
+                      <span className="grid min-h-5 min-w-5 place-items-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-fg">
+                        {myOpenFindOuts.length}
+                      </span>
+                    ) : null}
                   </button>
                 ))}
               </div>
@@ -258,10 +280,13 @@ export function AppShell() {
           </div>
 
           <TabsContent value="log" className="mt-0">
-            <LogForm onLogged={() => selectTab("history")} />
+            <LogForm onLogged={(r) => selectTab(r.findOut ? "findout" : "history")} />
           </TabsContent>
           <TabsContent value="history" className="mt-0">
             <OffenseList />
+          </TabsContent>
+          <TabsContent value="findout" className="mt-0">
+            <FindOutPanel />
           </TabsContent>
           <TabsContent value="board" className="mt-0">
             <ScoreboardPanel />
@@ -362,7 +387,14 @@ export function AppShell() {
                 )}
               >
                 <Icon className={cn("size-5", active && "stroke-[2.25]")} aria-hidden />
-                <span>{label}</span>
+                <span className="relative">
+                  {label}
+                  {id === "findout" && myOpenFindOuts.length > 0 ? (
+                    <span className="absolute -top-2 -right-2.5 grid min-h-4 min-w-4 place-items-center rounded-full bg-primary px-0.5 text-[9px] font-bold text-primary-fg">
+                      {myOpenFindOuts.length}
+                    </span>
+                  ) : null}
+                </span>
               </button>
             );
           })}
