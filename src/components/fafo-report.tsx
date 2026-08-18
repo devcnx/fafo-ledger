@@ -132,6 +132,9 @@ export function FafoReport() {
                 : "s"}{" "}
               still in the bank.{" "}
               {perks.filter((p) => p.status === "redeemed").length} cashed in.
+              {perks.filter((p) => p.status === "burned").length > 0
+                ? ` ${perks.filter((p) => p.status === "burned").length} burned for repeat FA.`
+                : ""}
             </p>
           ) : null}
         </CardContent>
@@ -162,6 +165,7 @@ export function FafoReport() {
                             ? "Waived"
                             : "Appealed"}
                   </Badge>
+                  {f.repeatCount >= 2 ? <Badge variant="danger">Repeat ×{f.repeatCount}</Badge> : null}
                   <span className="font-medium">{f.title}</span>
                 </div>
                 {f.body ? <p className="mt-1 text-fg-muted">{f.body}</p> : null}
@@ -201,7 +205,9 @@ export function FafoReport() {
                         ? "Cash-In Pending"
                         : p.status === "redeemed"
                           ? "Cashed In"
-                          : "Revoked"}
+                          : p.status === "burned"
+                            ? "Burned For FA"
+                            : "Revoked"}
                   </Badge>
                   <span className="font-medium">{p.title}</span>
                 </div>

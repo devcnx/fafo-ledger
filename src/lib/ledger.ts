@@ -1,13 +1,20 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { authMiddleware } from "@/lib/auth/middleware";
-import { STARTER_TEMPLATES } from "@/lib/constants";
+import { STARTER_TEMPLATES, FIND_OUT_SUGGESTIONS } from "@/lib/constants";
 import {
   LEGACY_HOUSEHOLD,
   type AppRole,
   type HouseholdMode,
 } from "@/lib/roles";
 import { addCentralDays } from "@/lib/find-out";
+import {
+  countCategoryRepeats,
+  pickPerkToBurn,
+  repeatDueDays,
+  stampRepeatTax,
+  upgradeSeverity,
+} from "@/lib/repeat-tax";
 import type {
   Apology,
   AppNotification,
@@ -373,6 +380,7 @@ function mapFindOut(row: Record<string, unknown>): FindOut {
     acknowledgedAt: row.acknowledged_at == null ? null : new Date(String(row.acknowledged_at)).toISOString(),
     servedAt: row.served_at == null ? null : new Date(String(row.served_at)).toISOString(),
     escalationNote: String(row.escalation_note ?? ""),
+    repeatCount: Math.max(1, Number(row.repeat_count ?? 1) || 1),
     createdAt: new Date(String(row.created_at)).toISOString(),
     updatedAt: new Date(String(row.updated_at)).toISOString(),
   };
@@ -621,41 +629,154 @@ export const addOffense = createServerFn({ method: "POST" })
         who.householdId,
       );
     }
-    if (data.findOut?.title.trim()) {
+
+    const offenseRows = await sql<Record<string, unknown>>`
+      select date, category, against_role, archived, status
+      from offenses
+      where household_id = ${who.householdId}
+    `;
+    const repeatCount = countCategoryRepeats(
+      offenseRows.map((r) => ({
+        date: String(r.date),
+        category: String(r.category),
+        againstRole: String(r.against_role) as AppRole,
+        archived: Number(r.archived ?? 0) === 1,
+        status: String(r.status) as OffenseStatus,
+      })),
+      data.category.trim(),
+      againstRole,
+    );
+    if (repeatCount >= 2) {
+      await sql`update offenses set status = 'pattern' where id = ${id}`;
+    }
+
+    const openFoRows = await sql<Record<string, unknown>>`
+      select * from find_outs
+      where household_id = ${who.householdId}
+        and assigned_to_role = ${againstRole}
+        and status in ('issued', 'acknowledged', 'appealed')
+    `;
+    const shouldTax = repeatCount >= 2 || openFoRows.length > 0;
+
+    let perkBurned: string | null = null;
+    if (shouldTax) {
+      const perkRows = await sql<Record<string, unknown>>`
+        select * from perks
+        where household_id = ${who.householdId}
+          and assigned_to_role = ${againstRole}
+          and status = 'available'
+      `;
+      const pick = pickPerkToBurn(perkRows.map(mapPerk), againstRole);
+      if (pick) {
+        await sql`
+          update perks
+          set status = 'burned',
+              honor_note = ${`Burned For Repeat FA: ${data.title.trim()}`},
+              updated_at = ${now}
+          where id = ${pick.id}
+        `;
+        perkBurned = pick.title;
+      }
+    }
+
+    if (openFoRows.length > 0) {
+      const sooner = addCentralDays(repeatCount >= 3 ? 0 : 1);
+      for (const row of openFoRows) {
+        const prevNote = String(row.escalation_note ?? "");
+        const note = [prevNote, `Repeat FA While FO Was Open: ${data.title.trim()}`]
+          .filter(Boolean)
+          .join(" · ");
+        const currentDue =
+          row.due_date == null || row.due_date === "" ? null : String(row.due_date).slice(0, 10);
+        const due = currentDue && currentDue <= sooner ? currentDue : sooner;
+        const nextCount = Math.max(1, Number(row.repeat_count ?? 1) || 1) + 1;
+        await sql`
+          update find_outs
+          set escalation_note = ${note},
+              due_date = ${due},
+              status = 'issued',
+              repeat_count = ${nextCount},
+              updated_at = ${now}
+          where id = ${String(row.id)}
+        `;
+      }
+    }
+
+    const providedFo = Boolean(data.findOut?.title.trim());
+    const mustFo = repeatCount >= 2;
+    let findOutIssued = false;
+    if (providedFo || mustFo) {
+      const sev = upgradeSeverity(data.severity, repeatCount);
+      const suggestion = FIND_OUT_SUGGESTIONS[sev][0];
+      let foTitle = data.findOut?.title?.trim() || suggestion.title;
+      let foBody = (data.findOut?.body ?? "").trim() || suggestion.body;
+      let foDue =
+        data.findOut?.dueDate || addCentralDays(repeatDueDays(repeatCount, suggestion.dueDays));
+      let foNote = "";
+      if (repeatCount >= 2) {
+        const stamped = stampRepeatTax(foTitle, foBody, repeatCount, data.category.trim());
+        foTitle = stamped.title;
+        foBody = stamped.body;
+        foNote = stamped.note;
+        foDue = addCentralDays(repeatDueDays(repeatCount, suggestion.dueDays));
+      }
       const foId = uid();
       await sql`
         insert into find_outs (
           id, household_id, offense_id, title, body, issued_by_role, issued_by_email,
-          assigned_to_role, status, due_date, escalation_note, created_at, updated_at
+          assigned_to_role, status, due_date, escalation_note, repeat_count, created_at, updated_at
         ) values (
           ${foId},
           ${who.householdId},
           ${id},
-          ${data.findOut.title.trim()},
-          ${(data.findOut.body ?? "").trim()},
+          ${foTitle},
+          ${foBody},
           ${who.role},
           ${who.email},
           ${againstRole},
           ${"issued"},
-          ${data.findOut.dueDate || null},
-          ${""},
+          ${foDue || null},
+          ${foNote},
+          ${repeatCount},
           ${now},
           ${now}
         )
       `;
+      findOutIssued = true;
       if (targetEmail) {
         await notify(
           sql,
           targetEmail,
-          "You Found Out",
-          data.findOut.title.trim(),
+          repeatCount >= 2 ? "Repeat Tax — You Found Out" : "You Found Out",
+          foTitle,
           "findout",
           "findout",
           who.householdId,
         );
       }
     }
-    return { id };
+
+    if (targetEmail && shouldTax) {
+      await notify(
+        sql,
+        targetEmail,
+        perkBurned ? "Perk Burned For Repeat FA" : "FO Escalated — You Kept Fucking Around",
+        perkBurned
+          ? `${perkBurned} is gone. ${data.title.trim()}`
+          : data.title.trim(),
+        "findout",
+        "findout",
+        who.householdId,
+      );
+    }
+
+    return {
+      id,
+      repeatCount,
+      perkBurned,
+      forcedFo: mustFo && !providedFo,
+      findOutIssued,
+    };
   });
 
 const updateOffenseInput = z.object({
@@ -1699,7 +1820,7 @@ export const issueFindOut = createServerFn({ method: "POST" })
     await sql`
       insert into find_outs (
         id, household_id, offense_id, title, body, issued_by_role, issued_by_email,
-        assigned_to_role, status, due_date, escalation_note, created_at, updated_at
+        assigned_to_role, status, due_date, escalation_note, repeat_count, created_at, updated_at
       ) values (
         ${id},
         ${who.householdId},
@@ -1712,6 +1833,7 @@ export const issueFindOut = createServerFn({ method: "POST" })
         ${"issued"},
         ${data.dueDate || null},
         ${""},
+        ${1},
         ${now},
         ${now}
       )

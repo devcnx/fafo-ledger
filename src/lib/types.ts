@@ -140,6 +140,7 @@ export type FindOut = {
   acknowledgedAt: string | null;
   servedAt: string | null;
   escalationNote: string;
+  repeatCount: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -157,7 +158,7 @@ export type OffenseTemplate = {
 
 export type PerkKind = "favor" | "pass" | "date" | "jail_pass";
 
-export type PerkStatus = "available" | "pending" | "redeemed" | "revoked";
+export type PerkStatus = "available" | "pending" | "redeemed" | "revoked" | "burned";
 
 export type Perk = {
   id: string;

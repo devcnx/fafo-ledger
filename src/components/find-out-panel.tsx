@@ -23,6 +23,7 @@ const STEPS = [
   { n: "3", title: "They See It", body: "Warrant On Every Screen. Notification. No Hiding." },
   { n: "4", title: "Acknowledge", body: "They Tap I Found Out. Ignoring It Is More FA." },
   { n: "5", title: "Serve Or Else", body: "They Serve It, Appeal It, Or You Escalate." },
+  { n: "6", title: "Repeat Tax", body: "They Do It Again: Perk Burns. FO Gets Worse. No Diary Path." },
 ];
 
 export function FindOutPanel() {
@@ -114,7 +115,7 @@ export function FindOutPanel() {
           <CardDescription>Five Steps. The Last Three Are the FO Your Coworker Wanted.</CardDescription>
         </CardHeader>
         <CardContent>
-          <ol className="grid gap-2 sm:grid-cols-5">
+          <ol className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
             {STEPS.map((s) => (
               <li
                 key={s.n}
@@ -313,6 +314,9 @@ function FindOutCard({
           <Badge variant={findOutBadgeVariant(f)}>
             {late && f.status !== "served" ? "Overdue" : findOutStatusLabel(f.status)}
           </Badge>
+          {f.repeatCount >= 2 ? (
+            <Badge variant="danger">Repeat Tax ×{f.repeatCount}</Badge>
+          ) : null}
           <Badge variant="outline">→ {assignee.split(" ")[0]}</Badge>
           <span className="text-xs text-fg-subtle">Issued By {issuer.split(" ")[0]}</span>
           {f.dueDate ? (

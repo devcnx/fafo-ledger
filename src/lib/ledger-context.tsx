@@ -100,7 +100,13 @@ type LedgerContextValue = {
     remorse?: number | null;
     againstRole?: AppRole;
     findOut?: { title: string; body?: string; dueDate?: string | null };
-  }) => Promise<void>;
+  }) => Promise<{
+    id?: string;
+    repeatCount?: number;
+    perkBurned?: string | null;
+    forcedFo?: boolean;
+    findOutIssued?: boolean;
+  }>;
   updateOffense: (
     id: string,
     patch: Partial<Offense> & {
@@ -296,8 +302,9 @@ export function LedgerProvider({ children }: { children: ReactNode }) {
       perks: snap?.perks ?? [],
       refresh,
       addOffense: async (input) => {
-        await addOffenseFn({ data: input });
+        const res = await addOffenseFn({ data: input });
         await refresh();
+        return res ?? {};
       },
       updateOffense: async (id, patch) => {
         await updateOffenseFn({

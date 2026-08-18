@@ -6,6 +6,7 @@ export function perkStatusLabel(s: PerkStatus): string {
   if (s === "pending") return "Cash-In Pending";
   if (s === "redeemed") return "Cashed In";
   if (s === "revoked") return "Revoked";
+  if (s === "burned") return "Burned For FA";
   return s;
 }
 
@@ -31,6 +32,7 @@ export function perkBadgeVariant(p: Perk) {
   if (p.status === "redeemed") return "success" as const;
   if (p.status === "pending") return "warn" as const;
   if (p.status === "revoked") return "muted" as const;
+  if (p.status === "burned") return "danger" as const;
   if (p.kind === "jail_pass") return "danger" as const;
   return "default" as const;
 }

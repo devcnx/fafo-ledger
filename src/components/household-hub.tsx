@@ -217,7 +217,8 @@ export function ConsequencesPanel() {
             Consequences Board
           </CardTitle>
           <CardDescription>
-            Agreed “If X Then Y” Rules. Assigned Partner Clears Them When Done.
+            Manual “If X Then Y” Notes. Repeat FA Also Auto-Fires: Perk Burns, FO Escalates. That
+            Path Lives On Find Out.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">

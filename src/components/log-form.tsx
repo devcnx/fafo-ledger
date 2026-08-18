@@ -9,6 +9,12 @@ import { Input, Label, Textarea } from "@/components/ui/input";
 import { FIND_OUT_SUGGESTIONS, CONTEXT_OPTIONS, MOOD_OPTIONS } from "@/lib/constants";
 import { addCentralDays } from "@/lib/find-out";
 import { useLedger } from "@/lib/ledger-context";
+import {
+  countCategoryRepeats,
+  hasOpenFindOut,
+  pickPerkToBurn,
+  upgradeSeverity,
+} from "@/lib/repeat-tax";
 import type { EvidenceItem, Severity } from "@/lib/types";
 import { centralLocalToIso, toLocalDatetimeValue } from "@/lib/utils";
 
@@ -17,7 +23,8 @@ function toggle<T>(list: T[], item: T, set: (v: T[]) => void) {
 }
 
 export function LogForm({ onLogged }: { onLogged?: (result: { findOut: boolean }) => void }) {
-  const { addOffense, categories, profile, role, settings, templates } = useLedger();
+  const { addOffense, categories, profile, role, settings, templates, offenses, findOuts, perks } =
+    useLedger();
   const againstRole = role === "tracker" ? "subject" : "tracker";
   const otherName =
     againstRole === "subject" ? profile.subjectName : profile.trackerName;
@@ -40,14 +47,23 @@ export function LogForm({ onLogged }: { onLogged?: (result: { findOut: boolean }
   const [includeFo, setIncludeFo] = useState(true);
   const [foCustomized, setFoCustomized] = useState(false);
 
+  const finalCategoryPreview = customCat.trim() || category;
+  const priorRepeats = countCategoryRepeats(offenses, finalCategoryPreview, againstRole);
+  const nextRepeat = priorRepeats + 1;
+  const outstandingFo = hasOpenFindOut(findOuts, againstRole);
+  const willTax = nextRepeat >= 2 || outstandingFo;
+  const mustFo = nextRepeat >= 2;
+  const perkAtRisk = willTax ? pickPerkToBurn(perks, againstRole) : null;
+  const taxSeverity = upgradeSeverity(severity, nextRepeat);
+
   useEffect(() => {
     if (foCustomized) return;
-    const s = FIND_OUT_SUGGESTIONS[severity][0];
+    const s = FIND_OUT_SUGGESTIONS[taxSeverity][0];
     if (!s) return;
     setFoTitle(s.title);
     setFoBody(s.body);
     setFoDue(addCentralDays(s.dueDays));
-  }, [severity, foCustomized]);
+  }, [taxSeverity, foCustomized]);
 
 
   const usableTemplates = useMemo(
@@ -79,13 +95,13 @@ export function LogForm({ onLogged }: { onLogged?: (result: { findOut: boolean }
       toast.error("Write What Happened — Receipts Matter.");
       return;
     }
-    if (includeFo && !foTitle.trim()) {
-      toast.error("Name The Find Out — Or Uncheck Issue It.");
+    if ((includeFo || mustFo) && !foTitle.trim()) {
+      toast.error("Name The Find Out — Repeats Cannot Skip The Bill.");
       return;
     }
     setSaving(true);
     try {
-      await addOffense({
+      const result = await addOffense({
         date: centralLocalToIso(date),
         severity,
         category: finalCategory,
@@ -98,12 +114,19 @@ export function LogForm({ onLogged }: { onLogged?: (result: { findOut: boolean }
         remorse: remorse === "" ? null : Number(remorse),
         againstRole,
         findOut:
-          includeFo && foTitle.trim()
+          (includeFo || mustFo) && foTitle.trim()
             ? { title: foTitle.trim(), body: foBody.trim(), dueDate: foDue || null }
             : undefined,
       });
-      const issuedFo = Boolean(includeFo && foTitle.trim());
-      toast.success(issuedFo ? "Logged. Find Out Issued." : "Logged. Receipt Filed.");
+      const issuedFo = Boolean(result.findOutIssued ?? ((includeFo || mustFo) && foTitle.trim()));
+      if (result.perkBurned) {
+        toast.success(`Logged. Repeat Tax. Perk Burned: ${result.perkBurned}.`);
+      } else if ((result.repeatCount ?? 1) >= 2) {
+        toast.success("Logged. Repeat Tax Issued. FO Got Worse.");
+      } else {
+        toast.success(issuedFo ? "Logged. Find Out Issued." : "Logged. Receipt Filed.");
+      }
+      onLogged?.({ findOut: issuedFo || Boolean(result.findOutIssued) });
       setTitle("");
       setDescription("");
       setImpact("");
@@ -118,7 +141,6 @@ export function LogForm({ onLogged }: { onLogged?: (result: { findOut: boolean }
       setFoBody("");
       setFoDue("");
       setDate(toLocalDatetimeValue());
-      onLogged?.({ findOut: issuedFo });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could Not Save");
     } finally {
@@ -299,28 +321,48 @@ export function LogForm({ onLogged }: { onLogged?: (result: { findOut: boolean }
             </select>
           </div>
 
+          {willTax ? (
+            <div className="rounded-xl border border-danger/40 bg-danger-soft/60 p-3 sm:p-4">
+              <p className="text-sm font-semibold text-danger">
+                {mustFo ? `Repeat #${nextRepeat} In ${finalCategoryPreview}.` : "They Still Have Open FO."}{" "}
+                This Path Burns Perks.
+              </p>
+              <p className="mt-1 text-sm text-fg-muted">
+                {mustFo
+                  ? "FO Is Mandatory. Sentence Upgrades. Outstanding FO Gets Pulled In."
+                  : "New FA While FO Is Open Escalates The Docket."}{" "}
+                {perkAtRisk
+                  ? `On The Chopping Block: ${perkAtRisk.title}.`
+                  : "No Perk In Their Bank To Burn — FO Still Gets Worse."}
+              </p>
+            </div>
+          ) : null}
+
           <div className="rounded-xl border border-primary/25 bg-primary-soft/40 p-3 sm:p-4">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <Label className="mb-0">The Find Out</Label>
                 <p className="mt-1 text-sm text-fg-muted">
-                  FA Without FO Is Just a Diary. Sentence {otherName.split(" ")[0]}.
+                  {mustFo
+                    ? "Repeats Don't Get A Diary Entry. They Get A Bill."
+                    : `FA Without FO Is Just a Diary. Sentence ${otherName.split(" ")[0]}.`}
                 </p>
               </div>
               <label className="inline-flex min-h-11 shrink-0 items-center gap-2 text-sm font-medium">
                 <input
                   type="checkbox"
-                  checked={includeFo}
+                  checked={includeFo || mustFo}
+                  disabled={mustFo}
                   onChange={(e) => setIncludeFo(e.target.checked)}
                   className="size-4 rounded border-border"
                 />
-                Issue It
+                {mustFo ? "Required" : "Issue It"}
               </label>
             </div>
-            {includeFo ? (
+            {includeFo || mustFo ? (
               <div className="mt-3 space-y-3">
                 <div className="flex flex-wrap gap-1.5">
-                  {FIND_OUT_SUGGESTIONS[severity].map((s) => (
+                  {FIND_OUT_SUGGESTIONS[taxSeverity].map((s) => (
                     <button
                       key={s.title}
                       type="button"
@@ -378,7 +420,9 @@ export function LogForm({ onLogged }: { onLogged?: (result: { findOut: boolean }
             <Plus className="size-4" />
             {saving
               ? "Saving…"
-              : includeFo && foTitle.trim()
+              : mustFo
+                ? `Log Repeat Tax + Serve FO (${otherName.split(" ")[0]})`
+                : includeFo && foTitle.trim()
                 ? `Log FA + Serve FO (${otherName.split(" ")[0]})`
                 : `Add To Ledger (Against ${otherName.split(" ")[0]})`}
           </Button>

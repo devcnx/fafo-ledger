@@ -216,6 +216,9 @@ export async function ensureSeedUsers(): Promise<void> {
   await sql.query(
     `create index if not exists find_outs_household_idx on find_outs (household_id, created_at desc)`,
   );
+  await sql.query(
+    `alter table find_outs add column if not exists repeat_count integer not null default 1`,
+  );
   await sql.query(`
     create table if not exists perks (
       id text primary key,
