@@ -13,6 +13,9 @@ import {
   addOffense as addOffenseFn,
   addQuote as addQuoteFn,
   clearOffenses as clearOffensesFn,
+  clearTruce as clearTruceFn,
+  createBond as createBondFn,
+  decideBargain as decideBargainFn,
   deleteConsequence as deleteConsequenceFn,
   deleteOffense as deleteOffenseFn,
   deleteQuote as deleteQuoteFn,
@@ -20,6 +23,8 @@ import {
   getLedger,
   grantPerk as grantPerkFn,
   issueFindOut as issueFindOutFn,
+  proposeBargain as proposeBargainFn,
+  reaffirmOffense as reaffirmOffenseFn,
   resolveFindOut as resolveFindOutFn,
   resolvePerk as resolvePerkFn,
   markNotificationsRead as markNotificationsReadFn,
@@ -28,6 +33,7 @@ import {
   resolveCredit as resolveCreditFn,
   resolveDispute as resolveDisputeFn,
   saveTemplate as saveTemplateFn,
+  setTruce as setTruceFn,
   submitApology as submitApologyFn,
   submitDispute as submitDisputeFn,
   updateConsequence as updateConsequenceFn,
@@ -35,6 +41,7 @@ import {
   updateProfile as updateProfileFn,
   updateQuote as updateQuoteFn,
   updateSettings as updateSettingsFn,
+  useAmnesty as useAmnestyFn,
   withdrawDispute as withdrawDisputeFn,
   type Dispute,
   type LedgerSnapshot,
@@ -44,6 +51,8 @@ import type {
   Apology,
   AppNotification,
   AppSettings,
+  BargainOffer,
+  Bond,
   Consequence,
   Credit,
   EvidenceItem,
@@ -52,8 +61,11 @@ import type {
   Offense,
   OffenseStatus,
   OffenseTemplate,
+  Parole,
+  PeaceStreakInfo,
   Perk,
   PerkKind,
+  PerkSource,
   Profile,
   Quote,
   Severity,
@@ -86,6 +98,13 @@ type LedgerContextValue = {
   templates: OffenseTemplate[];
   categories: string[];
   perks: Perk[];
+  bonds: Bond[];
+  paroles: Parole[];
+  bargains: BargainOffer[];
+  peaceStreaks: PeaceStreakInfo[];
+  truceUntil: string | null;
+  truceNote: string;
+  amnestyOn: string | null;
   refresh: () => Promise<void>;
   addOffense: (input: {
     date: string;
@@ -106,6 +125,8 @@ type LedgerContextValue = {
     perkBurned?: string | null;
     forcedFo?: boolean;
     findOutIssued?: boolean;
+    paroleViolation?: boolean;
+    bondBurned?: string | null;
   }>;
   updateOffense: (
     id: string,
@@ -123,6 +144,8 @@ type LedgerContextValue = {
   updateSettings: (input: {
     severityLabels?: SeverityLabels;
     purgeForgivenDays?: number;
+    statuteDays?: number;
+    coolingOffMinutes?: number;
   }) => Promise<void>;
   purgeForgiven: () => Promise<void>;
   submitDispute: (input: {
@@ -186,7 +209,7 @@ type LedgerContextValue = {
     kind?: PerkKind;
     assignedToRole?: AppRole;
     expiresOn?: string | null;
-    source?: "manual" | "fo_served";
+    source?: PerkSource;
     sourceId?: string | null;
   }) => Promise<void>;
   resolvePerk: (input: {
@@ -223,6 +246,27 @@ type LedgerContextValue = {
     impact?: string;
   }) => Promise<void>;
   deleteTemplate: (id: string) => Promise<void>;
+  reaffirmOffense: (id: string) => Promise<void>;
+  setTruce: (input: { days: number; note?: string }) => Promise<void>;
+  clearTruce: () => Promise<void>;
+  useAmnesty: (findOutId: string) => Promise<void>;
+  createBond: (input: {
+    title: string;
+    body?: string;
+    kind?: PerkKind;
+    category: string;
+    days: number;
+    assignedToRole?: AppRole;
+  }) => Promise<void>;
+  proposeBargain: (input: {
+    findOutId: string;
+    offers: { title: string; body?: string; dueDate?: string | null }[];
+  }) => Promise<void>;
+  decideBargain: (input: {
+    findOutId: string;
+    offerId?: string;
+    rejectAll?: boolean;
+  }) => Promise<void>;
 };
 
 const LedgerContext = createContext<LedgerContextValue | null>(null);
@@ -239,6 +283,8 @@ const emptyProfile: Profile = {
 const emptySettings: AppSettings = {
   severityLabels: {},
   purgeForgivenDays: 0,
+  statuteDays: 45,
+  coolingOffMinutes: 20,
 };
 
 export function LedgerProvider({ children }: { children: ReactNode }) {
@@ -251,6 +297,21 @@ export function LedgerProvider({ children }: { children: ReactNode }) {
     try {
       const data = await getLedger();
       setSnap(data);
+      if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+        const seenKey = "fafo-notif-seen-v1";
+        const seen = new Set<string>(JSON.parse(sessionStorage.getItem(seenKey) || "[]"));
+        for (const n of data.notifications) {
+          if (n.read || seen.has(n.id)) continue;
+          if (!["findout", "nudge", "calendar", "perk"].includes(n.kind)) continue;
+          try {
+            new Notification(n.title, { body: n.body, tag: n.id });
+          } catch {
+            /* ignore */
+          }
+          seen.add(n.id);
+        }
+        sessionStorage.setItem(seenKey, JSON.stringify([...seen].slice(-80)));
+      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Failed to load ledger";
       setError(msg);
@@ -300,6 +361,13 @@ export function LedgerProvider({ children }: { children: ReactNode }) {
       templates: snap?.templates ?? [],
       categories,
       perks: snap?.perks ?? [],
+      bonds: snap?.bonds ?? [],
+      paroles: snap?.paroles ?? [],
+      bargains: snap?.bargains ?? [],
+      peaceStreaks: snap?.peaceStreaks ?? [],
+      truceUntil: snap?.truceUntil ?? null,
+      truceNote: snap?.truceNote ?? "",
+      amnestyOn: snap?.amnestyOn ?? null,
       refresh,
       addOffense: async (input) => {
         const res = await addOffenseFn({ data: input });
@@ -428,6 +496,34 @@ export function LedgerProvider({ children }: { children: ReactNode }) {
       },
       deleteTemplate: async (id) => {
         await deleteTemplateFn({ data: { id } });
+        await refresh();
+      },
+      reaffirmOffense: async (id) => {
+        await reaffirmOffenseFn({ data: { id } });
+        await refresh();
+      },
+      setTruce: async (input) => {
+        await setTruceFn({ data: input });
+        await refresh();
+      },
+      clearTruce: async () => {
+        await clearTruceFn();
+        await refresh();
+      },
+      useAmnesty: async (findOutId) => {
+        await useAmnestyFn({ data: { findOutId } });
+        await refresh();
+      },
+      createBond: async (input) => {
+        await createBondFn({ data: input });
+        await refresh();
+      },
+      proposeBargain: async (input) => {
+        await proposeBargainFn({ data: input });
+        await refresh();
+      },
+      decideBargain: async (input) => {
+        await decideBargainFn({ data: input });
         await refresh();
       },
     };

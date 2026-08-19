@@ -23,6 +23,7 @@ export function countCategoryRepeats(
     (o) =>
       !o.archived &&
       o.status !== "forgiven" &&
+      o.status !== "stale" &&
       o.againstRole === againstRole &&
       o.category.trim().toLowerCase() === cat &&
       toCentralYmd(o.date) >= from,
@@ -46,13 +47,28 @@ export function stampRepeatTax(
   category: string,
 ): { title: string; body: string; note: string } {
   if (repeatCount < 2) return { title, body, note: "" };
-  const clean = title.replace(/^Repeat Tax:\s*/i, "");
+  const clean = title.replace(/^Repeat Tax:\s*/i, "").replace(/^Parole Violation:\s*/i, "");
   return {
     title: `Repeat Tax: ${clean}`,
     body: [body.trim(), `Repeat #${repeatCount} In ${category} (Last ${REPEAT_WINDOW_DAYS} Days). Perk Path Closed. FO Path Open.`]
       .filter(Boolean)
       .join("\n\n"),
     note: `Repeat #${repeatCount} · ${category}`,
+  };
+}
+
+export function stampParoleViolation(
+  title: string,
+  body: string,
+  category: string,
+): { title: string; body: string; note: string } {
+  const clean = title.replace(/^Parole Violation:\s*/i, "").replace(/^Repeat Tax:\s*/i, "");
+  return {
+    title: `Parole Violation: ${clean}`,
+    body: [body.trim(), `Still On Paper For ${category}. This One Hits Harder.`]
+      .filter(Boolean)
+      .join("\n\n"),
+    note: `Parole Violation · ${category}`,
   };
 }
 

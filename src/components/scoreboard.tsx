@@ -4,12 +4,14 @@ import { buildHeatmap, buildScoreboard, buildWarnings, daysUntilNext } from "@/l
 import { formatDate } from "@/lib/utils";
 
 export function ScoreboardPanel() {
-  const { offenses, disputes, credits, role, profile } = useLedger();
+  const { offenses, disputes, credits, role, profile, peaceStreaks, perks } = useLedger();
   if (!role) return null;
   const board = buildScoreboard(offenses, disputes, credits, role);
   const heat = buildHeatmap(offenses, 84);
   const warnings = buildWarnings(offenses);
   const maxHeat = Math.max(1, ...heat.map((h) => h.count));
+  const mineStreak = peaceStreaks.find((s) => s.role === role);
+  const peacePerks = perks.filter((p) => p.source === "peace_streak" && p.assignedToRole === role).length;
 
   const countdowns = [
     { label: "Anniversary", days: daysUntilNext(profile.anniversary), date: profile.anniversary },
@@ -30,6 +32,15 @@ export function ScoreboardPanel() {
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <Stat label="Open vs You" value={String(board.openAgainst)} />
         <Stat label="Peace Streak" value={board.peaceStreak === null ? "∞" : String(board.peaceStreak)} />
+        <Stat
+          label="Next Perk"
+          value={
+            mineStreak?.nextMilestone
+              ? `${mineStreak.daysUntilNext}d → ${mineStreak.nextMilestone}`
+              : "Maxed"
+          }
+        />
+        <Stat label="Peace Perks" value={String(peacePerks)} />
         <Stat
           label="Dispute Win %"
           value={board.disputeWinRate === null ? "—" : `${board.disputeWinRate}%`}

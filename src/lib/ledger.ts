@@ -12,6 +12,7 @@ import {
   countCategoryRepeats,
   pickPerkToBurn,
   repeatDueDays,
+  stampParoleViolation,
   stampRepeatTax,
   upgradeSeverity,
 } from "@/lib/repeat-tax";
@@ -19,6 +20,8 @@ import type {
   Apology,
   AppNotification,
   AppSettings,
+  BargainOffer,
+  Bond,
   Consequence,
   Credit,
   EvidenceItem,
@@ -27,8 +30,11 @@ import type {
   Offense,
   OffenseStatus,
   OffenseTemplate,
+  Parole,
+  PeaceStreakInfo,
   Perk,
   PerkKind,
+  PerkSource,
   PerkStatus,
   Profile,
   Quote,
@@ -79,6 +85,13 @@ export type LedgerSnapshot = {
   templates: OffenseTemplate[];
   categories: string[];
   perks: Perk[];
+  bonds: Bond[];
+  paroles: Parole[];
+  bargains: BargainOffer[];
+  peaceStreaks: PeaceStreakInfo[];
+  truceUntil: string | null;
+  truceNote: string;
+  amnestyOn: string | null;
 };
 
 function uid() {
@@ -254,6 +267,10 @@ function mapOffense(row: Record<string, unknown>): Offense {
     createdBy: String(row.created_by ?? ""),
     createdAt: new Date(String(row.created_at)).toISOString(),
     updatedAt: new Date(String(row.updated_at)).toISOString(),
+    statuteResetOn:
+      row.statute_reset_on == null || row.statute_reset_on === ""
+        ? null
+        : String(row.statute_reset_on).slice(0, 10),
   };
 }
 
@@ -396,12 +413,58 @@ function mapPerk(row: Record<string, unknown>): Perk {
     grantedByRole: String(row.granted_by_role) as AppRole,
     grantedByEmail: String(row.granted_by_email),
     assignedToRole: String(row.assigned_to_role) as AppRole,
-    source: String(row.source ?? "manual") as Perk["source"],
+    source: String(row.source ?? "manual") as PerkSource,
     sourceId: row.source_id == null || row.source_id === "" ? null : String(row.source_id),
     expiresOn:
       row.expires_on == null || row.expires_on === "" ? null : String(row.expires_on).slice(0, 10),
     redeemedAt: row.redeemed_at == null ? null : new Date(String(row.redeemed_at)).toISOString(),
     honorNote: String(row.honor_note ?? ""),
+    createdAt: new Date(String(row.created_at)).toISOString(),
+    updatedAt: new Date(String(row.updated_at)).toISOString(),
+  };
+}
+
+function mapBond(row: Record<string, unknown>): Bond {
+  return {
+    id: String(row.id),
+    title: String(row.title),
+    body: String(row.body ?? ""),
+    kind: String(row.kind ?? "favor") as PerkKind,
+    category: String(row.category),
+    days: Number(row.days ?? 7),
+    assignedToRole: String(row.assigned_to_role) as AppRole,
+    grantedByRole: String(row.granted_by_role) as AppRole,
+    grantedByEmail: String(row.granted_by_email ?? ""),
+    status: String(row.status ?? "escrow") as Bond["status"],
+    releasesOn: String(row.releases_on).slice(0, 10),
+    resolvedAt: row.resolved_at == null ? null : new Date(String(row.resolved_at)).toISOString(),
+    perkId: row.perk_id == null || row.perk_id === "" ? null : String(row.perk_id),
+    note: String(row.note ?? ""),
+    createdAt: new Date(String(row.created_at)).toISOString(),
+    updatedAt: new Date(String(row.updated_at)).toISOString(),
+  };
+}
+
+function mapParole(row: Record<string, unknown>): Parole {
+  return {
+    id: String(row.id),
+    role: String(row.role) as AppRole,
+    category: String(row.category),
+    findOutId: row.find_out_id == null || row.find_out_id === "" ? null : String(row.find_out_id),
+    endsOn: String(row.ends_on).slice(0, 10),
+    createdAt: new Date(String(row.created_at)).toISOString(),
+  };
+}
+
+function mapBargain(row: Record<string, unknown>): BargainOffer {
+  return {
+    id: String(row.id),
+    findOutId: String(row.find_out_id),
+    proposedByRole: String(row.proposed_by_role) as AppRole,
+    title: String(row.title),
+    body: String(row.body ?? ""),
+    dueDate: row.due_date == null || row.due_date === "" ? null : String(row.due_date).slice(0, 10),
+    status: String(row.status ?? "pending") as BargainOffer["status"],
     createdAt: new Date(String(row.created_at)).toISOString(),
     updatedAt: new Date(String(row.updated_at)).toISOString(),
   };
@@ -432,7 +495,12 @@ export const getLedger = createServerFn({ method: "GET" })
       subjectBirthday: "2000-01-01",
       notes: "",
     };
-    const emptySettings: AppSettings = { severityLabels: {}, purgeForgivenDays: 0 };
+    const emptySettings: AppSettings = {
+      severityLabels: {},
+      purgeForgivenDays: 0,
+      statuteDays: 45,
+      coolingOffMinutes: 20,
+    };
     if (!mem) {
       return {
         needsOnboarding: true,
@@ -457,6 +525,13 @@ export const getLedger = createServerFn({ method: "GET" })
         templates: [],
         categories: [],
         perks: [],
+        bonds: [],
+        paroles: [],
+        bargains: [],
+        peaceStreaks: [],
+        truceUntil: null,
+        truceNote: "",
+        amnestyOn: null,
       };
     }
     const who = await requireHousehold(context.userId);
@@ -485,8 +560,18 @@ export const getLedger = createServerFn({ method: "GET" })
     const settings: AppSettings = {
       severityLabels: parseJsonObject<SeverityLabels>(srow?.severity_labels, {}),
       purgeForgivenDays: Number(srow?.purge_forgiven_days ?? 0),
+      statuteDays: Number(srow?.statute_days ?? 45),
+      coolingOffMinutes: Number(srow?.cooling_off_minutes ?? 20),
     };
 
+    const { runHousekeeping } = await import("@/lib/housekeeping.server");
+    try {
+      await runHousekeeping({ sql, householdId: hh, profile, settings });
+    } catch (err) {
+      console.warn("[housekeeping]", err);
+    }
+
+    const today = addCentralDays(0);
     const [
       offenseRows,
       disputeRows,
@@ -499,6 +584,10 @@ export const getLedger = createServerFn({ method: "GET" })
       templateRows,
       catRows,
       perkRows,
+      bondRows,
+      paroleRows,
+      bargainRows,
+      hhMeta,
     ] = await Promise.all([
       sql<Record<string, unknown>>`select * from offenses where household_id = ${hh} order by date desc`,
       sql<Record<string, unknown>>`select * from disputes where household_id = ${hh} order by created_at desc`,
@@ -516,7 +605,20 @@ export const getLedger = createServerFn({ method: "GET" })
       sql<Record<string, unknown>>`select * from offense_templates where household_id = ${hh} order by title`,
       sql<{ name: string }>`select name from custom_categories where household_id = ${hh} order by name`,
       sql<Record<string, unknown>>`select * from perks where household_id = ${hh} order by created_at desc`,
+      sql<Record<string, unknown>>`select * from bonds where household_id = ${hh} order by created_at desc`,
+      sql<Record<string, unknown>>`
+        select * from paroles
+        where household_id = ${hh} and ends_on >= ${today}
+        order by ends_on asc
+      `,
+      sql<Record<string, unknown>>`select * from bargain_offers where household_id = ${hh} order by created_at desc`,
+      sql<Record<string, unknown>>`
+        select truce_until, truce_note, amnesty_on from households where id = ${hh} limit 1
+      `,
     ]);
+
+    const { buildPeaceStreaks } = await import("@/lib/house-economy");
+    const offenses = offenseRows.map(mapOffense);
 
     return {
       needsOnboarding: false,
@@ -530,7 +632,7 @@ export const getLedger = createServerFn({ method: "GET" })
       isOwner: who.isOwner,
       profile,
       settings,
-      offenses: offenseRows.map(mapOffense),
+      offenses,
       disputes: disputeRows.map(mapDispute),
       apologies: apologyRows.map(mapApology),
       consequences: consequenceRows.map(mapConsequence),
@@ -541,6 +643,19 @@ export const getLedger = createServerFn({ method: "GET" })
       templates: templateRows.map(mapTemplate),
       categories: catRows.map((c) => c.name),
       perks: perkRows.map(mapPerk),
+      bonds: bondRows.map(mapBond),
+      paroles: paroleRows.map(mapParole),
+      bargains: bargainRows.map(mapBargain),
+      peaceStreaks: buildPeaceStreaks(offenses),
+      truceUntil:
+        hhMeta[0]?.truce_until == null || hhMeta[0]?.truce_until === ""
+          ? null
+          : String(hhMeta[0].truce_until).slice(0, 10),
+      truceNote: String(hhMeta[0]?.truce_note ?? ""),
+      amnestyOn:
+        hhMeta[0]?.amnesty_on == null || hhMeta[0]?.amnesty_on === ""
+          ? null
+          : String(hhMeta[0].amnesty_on).slice(0, 10),
     };
   });
 
@@ -551,7 +666,7 @@ const offenseInput = z.object({
   title: z.string().min(1).max(200),
   description: z.string().min(1),
   impact: z.string().optional(),
-  status: z.enum(["open", "forgiven", "pattern"]).optional(),
+  status: z.enum(["open", "forgiven", "pattern", "stale"]).optional(),
   moods: z.array(z.string()).optional(),
   contexts: z.array(z.string()).optional(),
   evidence: evidenceSchema.optional(),
@@ -579,6 +694,17 @@ export const addOffense = createServerFn({ method: "POST" })
       throw new Error("You log what the other person did — pick the other partner.");
     }
     const sql = await getSql();
+    const today = addCentralDays(0);
+    const hhState = await sql<{ truce_until: string | null }>`
+      select truce_until from households where id = ${who.householdId} limit 1
+    `;
+    const truceUntil =
+      hhState[0]?.truce_until == null || hhState[0]?.truce_until === ""
+        ? null
+        : String(hhState[0].truce_until).slice(0, 10);
+    if (truceUntil && truceUntil >= today) {
+      throw new Error(`Truce Is On Until ${truceUntil}. Logging Is Frozen.`);
+    }
     const id = uid();
     const now = new Date().toISOString();
     await sql`
@@ -703,10 +829,39 @@ export const addOffense = createServerFn({ method: "POST" })
     }
 
     const providedFo = Boolean(data.findOut?.title.trim());
-    const mustFo = repeatCount >= 2;
+    const paroleRows = await sql<Record<string, unknown>>`
+      select * from paroles
+      where household_id = ${who.householdId}
+        and role = ${againstRole}
+        and ends_on >= ${today}
+        and lower(category) = ${data.category.trim().toLowerCase()}
+    `;
+    const onParole = paroleRows.length > 0;
+
+    const escrowBonds = await sql<Record<string, unknown>>`
+      select * from bonds
+      where household_id = ${who.householdId}
+        and status = 'escrow'
+        and assigned_to_role = ${againstRole}
+        and lower(category) = ${data.category.trim().toLowerCase()}
+    `;
+    let bondBurned: string | null = null;
+    for (const row of escrowBonds) {
+      await sql`
+        update bonds
+        set status = 'burned',
+            note = ${`Burned For FA: ${data.title.trim()}`},
+            resolved_at = ${now},
+            updated_at = ${now}
+        where id = ${String(row.id)}
+      `;
+      bondBurned = String(row.title);
+    }
+
+    const mustFo = repeatCount >= 2 || onParole;
     let findOutIssued = false;
     if (providedFo || mustFo) {
-      const sev = upgradeSeverity(data.severity, repeatCount);
+      const sev = upgradeSeverity(data.severity + (onParole ? 2 : 0), repeatCount);
       const suggestion = FIND_OUT_SUGGESTIONS[sev][0];
       let foTitle = data.findOut?.title?.trim() || suggestion.title;
       let foBody = (data.findOut?.body ?? "").trim() || suggestion.body;
@@ -719,6 +874,13 @@ export const addOffense = createServerFn({ method: "POST" })
         foBody = stamped.body;
         foNote = stamped.note;
         foDue = addCentralDays(repeatDueDays(repeatCount, suggestion.dueDays));
+      }
+      if (onParole) {
+        const stamped = stampParoleViolation(foTitle, foBody, data.category.trim());
+        foTitle = stamped.title;
+        foBody = stamped.body;
+        foNote = [foNote, stamped.note].filter(Boolean).join(" · ");
+        foDue = addCentralDays(1);
       }
       const foId = uid();
       await sql`
@@ -747,7 +909,7 @@ export const addOffense = createServerFn({ method: "POST" })
         await notify(
           sql,
           targetEmail,
-          repeatCount >= 2 ? "Repeat Tax — You Found Out" : "You Found Out",
+          repeatCount >= 2 ? "Repeat Tax — You Found Out" : onParole ? "Parole Violation — You Found Out" : "You Found Out",
           foTitle,
           "findout",
           "findout",
@@ -776,6 +938,8 @@ export const addOffense = createServerFn({ method: "POST" })
       perkBurned,
       forcedFo: mustFo && !providedFo,
       findOutIssued,
+      paroleViolation: onParole,
+      bondBurned,
     };
   });
 
@@ -787,7 +951,7 @@ const updateOffenseInput = z.object({
   title: z.string().optional(),
   description: z.string().optional(),
   impact: z.string().optional(),
-  status: z.enum(["open", "forgiven", "pattern"]).optional(),
+  status: z.enum(["open", "forgiven", "pattern", "stale"]).optional(),
   moods: z.array(z.string()).optional(),
   contexts: z.array(z.string()).optional(),
   evidence: evidenceSchema.optional(),
@@ -941,6 +1105,8 @@ export const updateProfile = createServerFn({ method: "POST" })
 const settingsInput = z.object({
   severityLabels: z.record(z.string(), z.string()).optional(),
   purgeForgivenDays: z.number().int().min(0).max(3650).optional(),
+  statuteDays: z.number().int().min(0).max(3650).optional(),
+  coolingOffMinutes: z.number().int().min(0).max(180).optional(),
 });
 
 export const updateSettings = createServerFn({ method: "POST" })
@@ -964,13 +1130,23 @@ export const updateSettings = createServerFn({ method: "POST" })
       data.purgeForgivenDays !== undefined
         ? data.purgeForgivenDays
         : Number(cur.purge_forgiven_days ?? 0);
+    const statute =
+      data.statuteDays !== undefined ? data.statuteDays : Number(cur.statute_days ?? 45);
+    const cooling =
+      data.coolingOffMinutes !== undefined
+        ? data.coolingOffMinutes
+        : Number(cur.cooling_off_minutes ?? 20);
     const now = new Date().toISOString();
     await sql`
-      insert into ledger_settings (id, severity_labels, purge_forgiven_days, updated_at)
-      values (${who.householdId}, ${labels}, ${purge}, ${now})
+      insert into ledger_settings (
+        id, severity_labels, purge_forgiven_days, statute_days, cooling_off_minutes, updated_at
+      )
+      values (${who.householdId}, ${labels}, ${purge}, ${statute}, ${cooling}, ${now})
       on conflict (id) do update set
         severity_labels = excluded.severity_labels,
         purge_forgiven_days = excluded.purge_forgiven_days,
+        statute_days = excluded.statute_days,
+        cooling_off_minutes = excluded.cooling_off_minutes,
         updated_at = excluded.updated_at
     `;
     return { ok: true };
@@ -1893,6 +2069,42 @@ export const resolveFindOut = createServerFn({ method: "POST" })
         set status = 'served', served_at = ${now}, updated_at = ${now}
         where id = ${data.id}
       `;
+      const offenseId = rows[0].offense_id == null ? null : String(rows[0].offense_id);
+      let sev = Number(rows[0].repeat_count ?? 1) >= 2 ? 4 : 0;
+      let category = "Other";
+      if (offenseId) {
+        const off = await sql<Record<string, unknown>>`
+          select severity, category from offenses
+          where id = ${offenseId} and household_id = ${who.householdId} limit 1
+        `;
+        if (off[0]) {
+          sev = Number(off[0].severity);
+          category = String(off[0].category || "Other");
+        }
+      }
+      if (sev >= 4) {
+        const { PAROLE_DAYS } = await import("@/lib/house-economy");
+        const ends = addCentralDays(PAROLE_DAYS);
+        await sql`
+          insert into paroles (id, household_id, role, category, find_out_id, ends_on)
+          values (${uid()}, ${who.householdId}, ${assigned}, ${category}, ${data.id}, ${ends})
+        `;
+        const paroleEmail =
+          assigned === who.role
+            ? who.email
+            : await partnerEmailInHousehold(who.householdId, who.role);
+        if (paroleEmail) {
+          await notify(
+            sql,
+            paroleEmail,
+            "Parole Started",
+            `${category} · ${PAROLE_DAYS} Days. Next FA In This Category Hits Harder.`,
+            "findout",
+            "findout",
+            who.householdId,
+          );
+        }
+      }
     } else if (action === "waive") {
       if (who.role !== issuer && !who.isOwner) throw new Error("Only The Issuer Can Waive.");
       await sql`
@@ -1955,7 +2167,7 @@ const grantPerkInput = z.object({
   kind: z.enum(["favor", "pass", "date", "jail_pass"]).optional(),
   assignedToRole: z.enum(["tracker", "subject"]).optional(),
   expiresOn: z.string().nullable().optional(),
-  source: z.enum(["manual", "fo_served"]).optional(),
+  source: z.enum(["manual", "fo_served", "peace_streak", "calendar_act", "bond"]).optional(),
   sourceId: z.string().nullable().optional(),
 });
 
@@ -2125,5 +2337,349 @@ export const resolvePerk = createServerFn({ method: "POST" })
       );
     }
     return { ok: true };
+  });
+
+export const reaffirmOffense = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((data: unknown) => z.object({ id: z.string() }).parse(data))
+  .handler(async ({ context, data }) => {
+    const { ensureSeedUsers } = await import("@/lib/seed.server");
+    const { getSql } = await import("@/lib/db");
+    await ensureSeedUsers();
+    const who = await requireHousehold(context.userId);
+    const sql = await getSql();
+    const rows = await sql<Record<string, unknown>>`
+      select * from offenses where id = ${data.id} and household_id = ${who.householdId} limit 1
+    `;
+    if (!rows[0]) throw new Error("Offense Not Found.");
+    const isAuthor =
+      String(rows[0].created_by) === who.userId ||
+      String(rows[0].author_email).toLowerCase() === who.email;
+    if (!isAuthor && who.role !== "tracker" && !who.isOwner) {
+      throw new Error("Only The Author Can Reaffirm This.");
+    }
+    const today = addCentralDays(0);
+    const now = new Date().toISOString();
+    await sql`
+      update offenses
+      set status = 'open', statute_reset_on = ${today}, updated_at = ${now}
+      where id = ${data.id}
+    `;
+    return { ok: true };
+  });
+
+export const setTruce = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((data: unknown) =>
+    z.object({ days: z.number().int().min(1).max(30), note: z.string().max(400).optional() }).parse(data),
+  )
+  .handler(async ({ context, data }) => {
+    const { ensureSeedUsers } = await import("@/lib/seed.server");
+    const { getSql } = await import("@/lib/db");
+    await ensureSeedUsers();
+    const who = await requireHousehold(context.userId);
+    const sql = await getSql();
+    const until = addCentralDays(data.days);
+    const note = (data.note ?? "").trim();
+    await sql`
+      update households
+      set truce_until = ${until},
+          truce_note = ${note},
+          truce_set_by = ${who.role}
+      where id = ${who.householdId}
+    `;
+    const open = await sql<Record<string, unknown>>`
+      select id, due_date from find_outs
+      where household_id = ${who.householdId}
+        and status in ('issued', 'acknowledged', 'appealed')
+    `;
+    for (const row of open) {
+      const current =
+        row.due_date == null || row.due_date === "" ? addCentralDays(0) : String(row.due_date).slice(0, 10);
+      const next = addCentralDays(data.days, current);
+      await sql`update find_outs set due_date = ${next}, updated_at = ${new Date().toISOString()} where id = ${String(row.id)}`;
+    }
+    const other = await partnerEmailInHousehold(who.householdId, who.role);
+    if (other) {
+      await notify(
+        sql,
+        other,
+        "Truce Is On",
+        `Logging Frozen Until ${until}. Open FO Dates Pushed.`,
+        "nudge",
+        "log",
+        who.householdId,
+      );
+    }
+    return { until };
+  });
+
+export const clearTruce = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    const { ensureSeedUsers } = await import("@/lib/seed.server");
+    const { getSql } = await import("@/lib/db");
+    await ensureSeedUsers();
+    const who = await requireHousehold(context.userId);
+    const sql = await getSql();
+    await sql`
+      update households
+      set truce_until = null, truce_note = '', truce_set_by = null
+      where id = ${who.householdId}
+    `;
+    return { ok: true };
+  });
+
+export const useAmnesty = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((data: unknown) => z.object({ findOutId: z.string() }).parse(data))
+  .handler(async ({ context, data }) => {
+    const { ensureSeedUsers } = await import("@/lib/seed.server");
+    const { getSql } = await import("@/lib/db");
+    await ensureSeedUsers();
+    const who = await requireHousehold(context.userId);
+    const sql = await getSql();
+    const today = addCentralDays(0);
+    const hh = await sql<{ amnesty_on: string | null }>`
+      select amnesty_on from households where id = ${who.householdId} limit 1
+    `;
+    const amnesty =
+      hh[0]?.amnesty_on == null || hh[0]?.amnesty_on === ""
+        ? null
+        : String(hh[0].amnesty_on).slice(0, 10);
+    if (amnesty !== today) throw new Error("No Amnesty Today.");
+    const rows = await sql<Record<string, unknown>>`
+      select * from find_outs where id = ${data.findOutId} and household_id = ${who.householdId} limit 1
+    `;
+    if (!rows[0]) throw new Error("Find Out Not Found.");
+    if (!["issued", "acknowledged", "appealed"].includes(String(rows[0].status))) {
+      throw new Error("That Find Out Is Already Closed.");
+    }
+    const now = new Date().toISOString();
+    await sql`update find_outs set status = 'waived', updated_at = ${now} where id = ${data.findOutId}`;
+    await sql`update households set amnesty_on = null where id = ${who.householdId}`;
+    const other = await partnerEmailInHousehold(who.householdId, who.role);
+    if (other) {
+      await notify(
+        sql,
+        other,
+        "Anniversary Amnesty Used",
+        String(rows[0].title),
+        "calendar",
+        "findout",
+        who.householdId,
+      );
+    }
+    return { ok: true };
+  });
+
+export const createBond = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((data: unknown) =>
+    z
+      .object({
+        title: z.string().min(1).max(200),
+        body: z.string().optional(),
+        kind: z.enum(["favor", "pass", "date", "jail_pass"]).optional(),
+        category: z.string().min(1).max(80),
+        days: z.number().int().min(3).max(90),
+        assignedToRole: z.enum(["tracker", "subject"]).optional(),
+      })
+      .parse(data),
+  )
+  .handler(async ({ context, data }) => {
+    const { ensureSeedUsers } = await import("@/lib/seed.server");
+    const { getSql } = await import("@/lib/db");
+    await ensureSeedUsers();
+    const who = await requireHousehold(context.userId);
+    const assigned = data.assignedToRole ?? (who.role === "tracker" ? "subject" : "tracker");
+    if (assigned === who.role) throw new Error("You Escrow Bonds For The Other Person.");
+    const sql = await getSql();
+    const id = uid();
+    const now = new Date().toISOString();
+    const releasesOn = addCentralDays(data.days);
+    await sql`
+      insert into bonds (
+        id, household_id, title, body, kind, category, days,
+        assigned_to_role, granted_by_role, granted_by_email,
+        status, releases_on, note, created_at, updated_at
+      ) values (
+        ${id},
+        ${who.householdId},
+        ${data.title.trim()},
+        ${(data.body ?? "").trim()},
+        ${data.kind ?? "favor"},
+        ${data.category.trim()},
+        ${data.days},
+        ${assigned},
+        ${who.role},
+        ${who.email},
+        ${"escrow"},
+        ${releasesOn},
+        ${""},
+        ${now},
+        ${now}
+      )
+    `;
+    const target = await partnerEmailInHousehold(who.householdId, who.role);
+    if (target) {
+      await notify(
+        sql,
+        target,
+        "Good-Behavior Bond Escrowed",
+        `${data.title.trim()} · Stay Clean In ${data.category.trim()} Until ${releasesOn}.`,
+        "perk",
+        "perks",
+        who.householdId,
+      );
+    }
+    return { id, releasesOn };
+  });
+
+export const proposeBargain = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((data: unknown) =>
+    z
+      .object({
+        findOutId: z.string(),
+        offers: z
+          .array(
+            z.object({
+              title: z.string().min(1).max(200),
+              body: z.string().max(2000).optional(),
+              dueDate: z.string().nullable().optional(),
+            }),
+          )
+          .min(1)
+          .max(3),
+      })
+      .parse(data),
+  )
+  .handler(async ({ context, data }) => {
+    const { ensureSeedUsers } = await import("@/lib/seed.server");
+    const { getSql } = await import("@/lib/db");
+    await ensureSeedUsers();
+    const who = await requireHousehold(context.userId);
+    const sql = await getSql();
+    const fo = await sql<Record<string, unknown>>`
+      select * from find_outs where id = ${data.findOutId} and household_id = ${who.householdId} limit 1
+    `;
+    if (!fo[0]) throw new Error("Find Out Not Found.");
+    if (String(fo[0].assigned_to_role) !== who.role) {
+      throw new Error("Only The Person Who Found Out Can Bargain.");
+    }
+    if (!["issued", "acknowledged", "appealed"].includes(String(fo[0].status))) {
+      throw new Error("This Find Out Is Closed.");
+    }
+    const pending = await sql<{ n: number }>`
+      select count(*)::int as n from bargain_offers
+      where find_out_id = ${data.findOutId} and status = 'pending'
+    `;
+    if (Number(pending[0]?.n ?? 0) > 0) throw new Error("A Bargain Is Already On The Table.");
+    const now = new Date().toISOString();
+    for (const offer of data.offers) {
+      await sql`
+        insert into bargain_offers (
+          id, household_id, find_out_id, proposed_by_role, title, body, due_date, status, created_at, updated_at
+        ) values (
+          ${uid()},
+          ${who.householdId},
+          ${data.findOutId},
+          ${who.role},
+          ${offer.title.trim()},
+          ${(offer.body ?? "").trim()},
+          ${offer.dueDate || null},
+          ${"pending"},
+          ${now},
+          ${now}
+        )
+      `;
+    }
+    const other = await partnerEmailInHousehold(who.householdId, who.role);
+    if (other) {
+      await notify(
+        sql,
+        other,
+        "Sentencing Bargain Proposed",
+        `${data.offers.length} Alternative${data.offers.length === 1 ? "" : "s"} On ${String(fo[0].title)}.`,
+        "findout",
+        "findout",
+        who.householdId,
+      );
+    }
+    return { ok: true };
+  });
+
+export const decideBargain = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((data: unknown) =>
+    z
+      .object({
+        findOutId: z.string(),
+        offerId: z.string().optional(),
+        rejectAll: z.boolean().optional(),
+      })
+      .parse(data),
+  )
+  .handler(async ({ context, data }) => {
+    const { ensureSeedUsers } = await import("@/lib/seed.server");
+    const { getSql } = await import("@/lib/db");
+    await ensureSeedUsers();
+    const who = await requireHousehold(context.userId);
+    const sql = await getSql();
+    const fo = await sql<Record<string, unknown>>`
+      select * from find_outs where id = ${data.findOutId} and household_id = ${who.householdId} limit 1
+    `;
+    if (!fo[0]) throw new Error("Find Out Not Found.");
+    if (String(fo[0].issued_by_role) !== who.role && !who.isOwner) {
+      throw new Error("Only The Issuer Can Decide The Bargain.");
+    }
+    const now = new Date().toISOString();
+    if (data.rejectAll || !data.offerId) {
+      await sql`
+        update bargain_offers
+        set status = 'rejected', updated_at = ${now}
+        where find_out_id = ${data.findOutId} and status = 'pending'
+      `;
+      const other = await partnerEmailInHousehold(who.householdId, who.role);
+      if (other) {
+        await notify(sql, other, "Bargain Rejected", String(fo[0].title), "findout", "findout", who.householdId);
+      }
+      return { ok: true, accepted: false };
+    }
+    const offer = await sql<Record<string, unknown>>`
+      select * from bargain_offers
+      where id = ${data.offerId} and find_out_id = ${data.findOutId} and household_id = ${who.householdId}
+      limit 1
+    `;
+    if (!offer[0] || String(offer[0].status) !== "pending") throw new Error("Offer Not Found.");
+    await sql`
+      update find_outs
+      set title = ${String(offer[0].title)},
+          body = ${String(offer[0].body ?? "")},
+          due_date = ${offer[0].due_date == null || offer[0].due_date === "" ? null : String(offer[0].due_date).slice(0, 10)},
+          escalation_note = ${[String(fo[0].escalation_note ?? ""), "Sentence Bargained."].filter(Boolean).join(" · ")},
+          updated_at = ${now}
+      where id = ${data.findOutId}
+    `;
+    await sql`update bargain_offers set status = 'accepted', updated_at = ${now} where id = ${data.offerId}`;
+    await sql`
+      update bargain_offers
+      set status = 'rejected', updated_at = ${now}
+      where find_out_id = ${data.findOutId} and id <> ${data.offerId} and status = 'pending'
+    `;
+    const other = await partnerEmailInHousehold(who.householdId, who.role);
+    if (other) {
+      await notify(
+        sql,
+        other,
+        "Bargain Accepted",
+        String(offer[0].title),
+        "findout",
+        "findout",
+        who.householdId,
+      );
+    }
+    return { ok: true, accepted: true };
   });
 

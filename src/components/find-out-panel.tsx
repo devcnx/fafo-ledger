@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input, Label, Textarea } from "@/components/ui/input";
+import { BargainBlock } from "@/components/bargain-block";
 import { FIND_OUT_SUGGESTIONS, PERK_SUGGESTIONS } from "@/lib/constants";
 import {
   addCentralDays,
@@ -27,7 +28,7 @@ const STEPS = [
 ];
 
 export function FindOutPanel() {
-  const { findOuts, offenses, perks, profile, role, issueFindOut, resolveFindOut, grantPerk } =
+  const { findOuts, offenses, perks, profile, role, issueFindOut, resolveFindOut, grantPerk, amnestyOn, useAmnesty } =
     useLedger();
   const otherRole = role === "tracker" ? "subject" : "tracker";
   const otherName = otherRole === "subject" ? profile.subjectName : profile.trackerName;
@@ -154,6 +155,8 @@ export function FindOutPanel() {
                 resolveFindOut={resolveFindOut}
                 grantPerk={grantPerk}
                 alreadyGranted={perks.some((p) => p.sourceId === f.id)}
+                amnestyOn={amnestyOn}
+                useAmnesty={useAmnesty}
               />
             ))}
           </CardContent>
@@ -254,6 +257,8 @@ export function FindOutPanel() {
                   resolveFindOut={resolveFindOut}
                   grantPerk={grantPerk}
                   alreadyGranted={perks.some((p) => p.sourceId === f.id)}
+                  amnestyOn={amnestyOn}
+                  useAmnesty={useAmnesty}
                 />
               </li>
             ))}
@@ -278,6 +283,8 @@ function FindOutCard({
   resolveFindOut,
   grantPerk,
   alreadyGranted,
+  amnestyOn,
+  useAmnesty,
 }: {
   f: FindOut;
   role: "tracker" | "subject" | null;
@@ -299,6 +306,8 @@ function FindOutCard({
     expiresOn?: string | null;
   }) => Promise<void>;
   alreadyGranted: boolean;
+  amnestyOn: string | null;
+  useAmnesty: (id: string) => Promise<void>;
 }) {
   const assignee = f.assignedToRole === "tracker" ? profile.trackerName : profile.subjectName;
   const issuer = f.issuedByRole === "tracker" ? profile.trackerName : profile.subjectName;
@@ -328,6 +337,22 @@ function FindOutCard({
         {offense ? <p className="text-xs text-fg-subtle">Linked FA: {offense.title}</p> : null}
         {f.escalationNote ? (
           <p className="border-l-2 border-primary/40 pl-3 text-sm text-fg">Note: {f.escalationNote}</p>
+        ) : null}
+
+        {amnestyOn && (f.status === "issued" || f.status === "acknowledged" || f.status === "appealed") ? (
+          <Button
+            size="sm"
+            variant="soft"
+            onClick={() =>
+              void useAmnesty(f.id).then(() => toast.success("Amnesty Used. Find Out Waived."))
+            }
+          >
+            Use Anniversary Amnesty
+          </Button>
+        ) : null}
+
+        {(mineItem || iIssued) && (f.status === "issued" || f.status === "acknowledged" || f.status === "appealed") ? (
+          <BargainBlock findOutId={f.id} mineItem={mineItem} iIssued={iIssued} />
         ) : null}
 
         <div className="grid grid-cols-2 gap-2 pt-1 sm:flex sm:flex-wrap">

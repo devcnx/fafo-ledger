@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input, Label, Textarea } from "@/components/ui/input";
+import { BondPanel } from "@/components/bond-panel";
 import { PERK_SUGGESTIONS } from "@/lib/constants";
 import { addCentralDays } from "@/lib/find-out";
 import { useLedger } from "@/lib/ledger-context";
@@ -191,6 +192,8 @@ export function PerksPanel() {
           resolvePerk={resolvePerk}
         />
       ) : null}
+
+      <BondPanel />
     </div>
   );
 }

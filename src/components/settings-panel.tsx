@@ -37,10 +37,17 @@ export function SettingsPanel() {
     isOwner,
     householdMode,
     refresh,
+    truceUntil,
+    setTruce,
+    clearTruce,
   } = useLedger();
   const [draft, setDraft] = useState(profile);
   const [labels, setLabels] = useState<SeverityLabels>(settings.severityLabels);
   const [purgeDays, setPurgeDays] = useState(settings.purgeForgivenDays);
+  const [statuteDays, setStatuteDays] = useState(settings.statuteDays);
+  const [coolingMins, setCoolingMins] = useState(settings.coolingOffMinutes);
+  const [truceDays, setTruceDays] = useState(7);
+  const [truceNote, setTruceNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [theme, setTheme] = useState<"light" | "dark" | "system">("system");
   const [pinA, setPinA] = useState("");
@@ -56,6 +63,8 @@ export function SettingsPanel() {
   useEffect(() => {
     setLabels(settings.severityLabels);
     setPurgeDays(settings.purgeForgivenDays);
+    setStatuteDays(settings.statuteDays);
+    setCoolingMins(settings.coolingOffMinutes);
   }, [settings]);
 
   useEffect(() => {
@@ -79,6 +88,7 @@ export function SettingsPanel() {
       <div className="space-y-4">
         <ThemeCard theme={theme} applyTheme={applyTheme} />
         <PinCard pinA={pinA} pinB={pinB} setPinA={setPinA} setPinB={setPinB} />
+        <NotifyCard />
         <InviteCard inviteCode={inviteCode} canManage={false} onRefresh={refresh} />
         <Card>
           <CardContent className="py-10 text-center text-sm text-fg-muted">
@@ -104,7 +114,12 @@ export function SettingsPanel() {
 
   async function saveSettings() {
     try {
-      await updateSettings({ severityLabels: labels, purgeForgivenDays: purgeDays });
+      await updateSettings({
+        severityLabels: labels,
+        purgeForgivenDays: purgeDays,
+        statuteDays,
+        coolingOffMinutes: coolingMins,
+      });
       toast.success("Settings Saved.");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Save Failed");
@@ -300,6 +315,87 @@ export function SettingsPanel() {
           </div>
         </CardContent>
       </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>House Rules</CardTitle>
+          <CardDescription>
+            Statute Of Limitations, Cooling-Off, And Truce. 0 Turns A Rule Off.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <Label>Statute Days (Open FA Goes Stale)</Label>
+              <Input
+                type="number"
+                min={0}
+                max={3650}
+                value={statuteDays}
+                onChange={(e) => setStatuteDays(Number(e.target.value) || 0)}
+              />
+            </div>
+            <div>
+              <Label>Cooling-Off Minutes (Sev 4–5)</Label>
+              <Input
+                type="number"
+                min={0}
+                max={180}
+                value={coolingMins}
+                onChange={(e) => setCoolingMins(Number(e.target.value) || 0)}
+              />
+            </div>
+          </div>
+          <Button type="button" onClick={() => void saveSettings()}>
+            Save House Rules
+          </Button>
+          <div className="border-t border-border pt-3">
+            <p className="text-sm font-semibold text-fg">Truce Mode</p>
+            <p className="mt-0.5 text-xs text-fg-muted">
+              {truceUntil ? `On Through ${formatDate(truceUntil)}.` : "Off. Logging Is Open."}
+            </p>
+            <div className="mt-2 grid gap-2 sm:grid-cols-2">
+              <div>
+                <Label>Days</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={30}
+                  value={truceDays}
+                  onChange={(e) => setTruceDays(Number(e.target.value) || 7)}
+                />
+              </div>
+              <div>
+                <Label>Note</Label>
+                <Input
+                  value={truceNote}
+                  onChange={(e) => setTruceNote(e.target.value)}
+                  placeholder="Vacation. Don't."
+                />
+              </div>
+            </div>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <Button
+                type="button"
+                onClick={() =>
+                  void setTruce({ days: truceDays, note: truceNote }).then(() =>
+                    toast.success("Truce Is On. FO Dates Pushed."),
+                  )
+                }
+              >
+                Start Truce
+              </Button>
+              {truceUntil ? (
+                <Button type="button" variant="outline" onClick={() => void clearTruce()}>
+                  End Truce
+                </Button>
+              ) : null}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <NotifyCard />
 
       <Card>
         <CardHeader>
@@ -524,6 +620,46 @@ function PinCard({
   );
 }
 
+function NotifyCard() {
+  const [perm, setPerm] = useState<NotificationPermission | "unsupported">("default");
+  useEffect(() => {
+    if (typeof window === "undefined" || !("Notification" in window)) {
+      setPerm("unsupported");
+      return;
+    }
+    setPerm(Notification.permission);
+  }, []);
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Due-Date Nudges</CardTitle>
+        <CardDescription>
+          Overdue FO, Expiring Perks, And Anniversary Countdowns. Allow Notifications So They Hit
+          The Lock Screen When You Open The App.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {perm === "unsupported" ? (
+          <p className="text-sm text-fg-muted">This Browser Does Not Do Notifications.</p>
+        ) : perm === "granted" ? (
+          <p className="text-sm text-success">Notifications Are On For This Device.</p>
+        ) : (
+          <Button
+            type="button"
+            onClick={() =>
+              void Notification.requestPermission().then((p) => {
+                setPerm(p);
+                toast.message(p === "granted" ? "Nudges Enabled." : "Permission Denied.");
+              })
+            }
+          >
+            Allow Notifications
+          </Button>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 function InviteCard({
   inviteCode,

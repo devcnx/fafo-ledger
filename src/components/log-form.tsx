@@ -1,13 +1,21 @@
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Plus, Zap } from "lucide-react";
+import { Plus, Sparkles, Zap } from "lucide-react";
 import { EvidencePicker } from "@/components/evidence-picker";
 import { SeverityPicker } from "@/components/severity-picker";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input, Label, Textarea } from "@/components/ui/input";
 import { FIND_OUT_SUGGESTIONS, CONTEXT_OPTIONS, MOOD_OPTIONS } from "@/lib/constants";
+import { draftWarrant } from "@/lib/draft-warrant";
 import { addCentralDays } from "@/lib/find-out";
+import {
+  COOLING_SEVERITY,
+  activeParoles,
+  bondsAtRisk,
+  coolingStorageKey,
+  isTruceActive,
+} from "@/lib/house-economy";
 import { useLedger } from "@/lib/ledger-context";
 import {
   countCategoryRepeats,
@@ -23,8 +31,21 @@ function toggle<T>(list: T[], item: T, set: (v: T[]) => void) {
 }
 
 export function LogForm({ onLogged }: { onLogged?: (result: { findOut: boolean }) => void }) {
-  const { addOffense, categories, profile, role, settings, templates, offenses, findOuts, perks } =
-    useLedger();
+  const {
+    addOffense,
+    categories,
+    profile,
+    role,
+    settings,
+    templates,
+    offenses,
+    findOuts,
+    perks,
+    bonds,
+    paroles,
+    truceUntil,
+    truceNote,
+  } = useLedger();
   const againstRole = role === "tracker" ? "subject" : "tracker";
   const otherName =
     againstRole === "subject" ? profile.subjectName : profile.trackerName;
@@ -46,15 +67,51 @@ export function LogForm({ onLogged }: { onLogged?: (result: { findOut: boolean }
   const [foDue, setFoDue] = useState("");
   const [includeFo, setIncludeFo] = useState(true);
   const [foCustomized, setFoCustomized] = useState(false);
+  const [coolUntil, setCoolUntil] = useState(0);
+  const [nowTs, setNowTs] = useState(Date.now());
+  const [drafting, setDrafting] = useState(false);
 
   const finalCategoryPreview = customCat.trim() || category;
   const priorRepeats = countCategoryRepeats(offenses, finalCategoryPreview, againstRole);
   const nextRepeat = priorRepeats + 1;
   const outstandingFo = hasOpenFindOut(findOuts, againstRole);
+  const paroleHits = activeParoles(paroles, againstRole, finalCategoryPreview);
+  const bondHits = bondsAtRisk(bonds, againstRole, finalCategoryPreview);
   const willTax = nextRepeat >= 2 || outstandingFo;
-  const mustFo = nextRepeat >= 2;
+  const mustFo = nextRepeat >= 2 || paroleHits.length > 0;
   const perkAtRisk = willTax ? pickPerkToBurn(perks, againstRole) : null;
   const taxSeverity = upgradeSeverity(severity, nextRepeat);
+  const truceOn = isTruceActive(truceUntil);
+  const coolingMs = (settings.coolingOffMinutes || 0) * 60_000;
+  const needsCool = severity >= COOLING_SEVERITY && coolingMs > 0;
+  const coolLeft = Math.max(0, coolUntil - nowTs);
+  const cooling = needsCool && coolLeft > 0;
+
+  useEffect(() => {
+    if (!needsCool) {
+      setCoolUntil(0);
+      return;
+    }
+    try {
+      const raw = localStorage.getItem(coolingStorageKey());
+      const parsed = raw ? (JSON.parse(raw) as { until?: number; severity?: number }) : null;
+      if (parsed?.until && parsed.until > Date.now() && (parsed.severity ?? 4) >= COOLING_SEVERITY) {
+        setCoolUntil(parsed.until);
+        return;
+      }
+    } catch {
+      /* ignore */
+    }
+    const until = Date.now() + coolingMs;
+    setCoolUntil(until);
+    localStorage.setItem(coolingStorageKey(), JSON.stringify({ until, severity }));
+  }, [needsCool, coolingMs, severity]);
+
+  useEffect(() => {
+    if (!cooling) return;
+    const t = setInterval(() => setNowTs(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [cooling]);
 
   useEffect(() => {
     if (foCustomized) return;
@@ -84,6 +141,13 @@ export function LogForm({ onLogged }: { onLogged?: (result: { findOut: boolean }
     if (t.category) setCategory(t.category);
   }
 
+  useEffect(() => {
+    const id = sessionStorage.getItem("fafo-quick-tpl");
+    if (!id) return;
+    sessionStorage.removeItem("fafo-quick-tpl");
+    applyTemplate(id);
+  }, [templates]);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const finalCategory = customCat.trim() || category;
@@ -97,6 +161,14 @@ export function LogForm({ onLogged }: { onLogged?: (result: { findOut: boolean }
     }
     if ((includeFo || mustFo) && !foTitle.trim()) {
       toast.error("Name The Find Out — Repeats Cannot Skip The Bill.");
+      return;
+    }
+    if (truceOn) {
+      toast.error(`Truce Is On Until ${truceUntil}. Logging Is Frozen.`);
+      return;
+    }
+    if (cooling) {
+      toast.error("Cooling Off. Severity 4–5 Waits.");
       return;
     }
     setSaving(true);
@@ -121,12 +193,18 @@ export function LogForm({ onLogged }: { onLogged?: (result: { findOut: boolean }
       const issuedFo = Boolean(result.findOutIssued ?? ((includeFo || mustFo) && foTitle.trim()));
       if (result.perkBurned) {
         toast.success(`Logged. Repeat Tax. Perk Burned: ${result.perkBurned}.`);
+      } else if (result.bondBurned) {
+        toast.success(`Logged. Bond Burned: ${result.bondBurned}.`);
+      } else if (result.paroleViolation) {
+        toast.success("Logged. Parole Violation. FO Hits Harder.");
       } else if ((result.repeatCount ?? 1) >= 2) {
         toast.success("Logged. Repeat Tax Issued. FO Got Worse.");
       } else {
         toast.success(issuedFo ? "Logged. Find Out Issued." : "Logged. Receipt Filed.");
       }
       onLogged?.({ findOut: issuedFo || Boolean(result.findOutIssued) });
+      localStorage.removeItem(coolingStorageKey());
+      setCoolUntil(0);
       setTitle("");
       setDescription("");
       setImpact("");
@@ -148,6 +226,40 @@ export function LogForm({ onLogged }: { onLogged?: (result: { findOut: boolean }
     }
   }
 
+  async function grokDraft() {
+    if (!title.trim() || !description.trim()) {
+      toast.error("Headline And What Happened First. Then Grok Writes The Warrant.");
+      return;
+    }
+    setDrafting(true);
+    try {
+      const res = await draftWarrant({
+        data: {
+          title: title.trim(),
+          description: description.trim(),
+          impact: impact.trim(),
+          category: finalCategoryPreview,
+          severity: taxSeverity,
+          repeatCount: nextRepeat,
+          parole: paroleHits.length > 0,
+        },
+      });
+      if (!res) return;
+      setFoTitle(res.title);
+      setFoBody(res.body);
+      setFoDue(addCentralDays(res.dueDays));
+      setFoCustomized(true);
+      setIncludeFo(true);
+      toast.success(res.ok ? "Warrant Drafted. Edit If You Want." : res.error);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Grok Could Not Draft This");
+    } finally {
+      setDrafting(false);
+    }
+  }
+
+  const coolLabel = `${Math.floor(coolLeft / 60000)}:${String(Math.floor((coolLeft % 60000) / 1000)).padStart(2, "0")}`;
+
   return (
     <Card>
       <CardHeader>
@@ -159,6 +271,27 @@ export function LogForm({ onLogged }: { onLogged?: (result: { findOut: boolean }
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
+          {truceOn ? (
+            <div className="rounded-xl border border-success/40 bg-success-soft/50 px-3 py-2.5 text-sm text-fg">
+              Truce Through {truceUntil}. {truceNote || "Logging Is Frozen."}
+            </div>
+          ) : null}
+          {paroleHits.length > 0 ? (
+            <div className="rounded-xl border border-warn/40 bg-warn-soft/60 px-3 py-2.5 text-sm text-fg">
+              {otherName.split(" ")[0]} Is On Parole For {finalCategoryPreview} Until{" "}
+              {paroleHits[0].endsOn}. This FA Auto-Escalates.
+            </div>
+          ) : null}
+          {bondHits.length > 0 ? (
+            <div className="rounded-xl border border-danger/30 bg-danger-soft/50 px-3 py-2.5 text-sm text-fg">
+              Bond On Ice: {bondHits[0].title}. Logging This Burns It.
+            </div>
+          ) : null}
+          {cooling ? (
+            <div className="rounded-xl border border-warn/40 bg-warn-soft/60 px-3 py-2.5 text-sm text-fg">
+              Cooling Off — {coolLabel} Remaining. Severity 4–5 Waits So You Don't Nuclear-Log At 11pm.
+            </div>
+          ) : null}
           {usableTemplates.length > 0 ? (
             <div>
               <Label>Quick Templates</Label>
@@ -362,6 +495,15 @@ export function LogForm({ onLogged }: { onLogged?: (result: { findOut: boolean }
             {includeFo || mustFo ? (
               <div className="mt-3 space-y-3">
                 <div className="flex flex-wrap gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => void grokDraft()}
+                    disabled={drafting}
+                    className="inline-flex min-h-9 items-center gap-1 rounded-full border border-primary/40 bg-primary-soft px-2.5 py-1.5 text-xs font-semibold text-primary hover:border-primary"
+                  >
+                    <Sparkles className="size-3" />
+                    {drafting ? "Drafting…" : "Grok Writes The Warrant"}
+                  </button>
                   {FIND_OUT_SUGGESTIONS[taxSeverity].map((s) => (
                     <button
                       key={s.title}
@@ -416,11 +558,15 @@ export function LogForm({ onLogged }: { onLogged?: (result: { findOut: boolean }
             ) : null}
           </div>
 
-          <Button type="submit" size="lg" className="w-full" disabled={saving}>
+          <Button type="submit" size="lg" className="w-full" disabled={saving || truceOn || cooling}>
             <Plus className="size-4" />
             {saving
               ? "Saving…"
-              : mustFo
+              : truceOn
+                ? "Truce — Logging Frozen"
+                : cooling
+                  ? `Cooling Off — ${coolLabel}`
+                  : mustFo
                 ? `Log Repeat Tax + Serve FO (${otherName.split(" ")[0]})`
                 : includeFo && foTitle.trim()
                 ? `Log FA + Serve FO (${otherName.split(" ")[0]})`

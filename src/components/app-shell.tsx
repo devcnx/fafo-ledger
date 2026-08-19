@@ -14,6 +14,7 @@ import {
   Settings,
   ShieldAlert,
   Sparkles,
+  Trophy,
   type LucideIcon,
 } from "lucide-react";
 import { Toaster } from "sonner";
@@ -27,6 +28,13 @@ import {
 import { FindOutPanel } from "@/components/find-out-panel";
 import { FafoReport } from "@/components/fafo-report";
 import { FoWarrant } from "@/components/fo-warrant";
+import {
+  AmnestyBanner,
+  InstallHint,
+  ParoleBanner,
+  PeaceBanner,
+  TruceBanner,
+} from "@/components/house-banners";
 import { PerkBank } from "@/components/perk-bank";
 import { PerksPanel } from "@/components/perks-panel";
 import { Insights } from "@/components/insights";
@@ -34,6 +42,7 @@ import { LogForm } from "@/components/log-form";
 import { NotificationsBell } from "@/components/notifications-bell";
 import { OffenseList } from "@/components/offense-list";
 import { Onboarding } from "@/components/onboarding";
+import { ReviewPanel } from "@/components/review-panel";
 import { ScoreboardPanel } from "@/components/scoreboard";
 import { SettingsPanel } from "@/components/settings-panel";
 import { StatsGrid } from "@/components/stats-grid";
@@ -58,6 +67,7 @@ type TabId =
   | "perks"
   | "quotes"
   | "insights"
+  | "review"
   | "findout"
   | "fafo"
   | "settings";
@@ -75,6 +85,7 @@ const ALL_TABS: { id: TabId; label: string; icon: LucideIcon }[] = [
   { id: "love", label: "Love", icon: Heart },
   { id: "quotes", label: "Quotes", icon: Quote },
   { id: "insights", label: "Insights", icon: BarChart3 },
+  { id: "review", label: "Review", icon: Trophy },
   { id: "settings", label: "Settings", icon: Settings },
 ];
 
@@ -98,6 +109,14 @@ export function AppShell() {
   } = useLedger();
   const [tab, setTab] = useState<string>("log");
   const [autoRouted, setAutoRouted] = useState(false);
+
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    const t = q.get("tab");
+    if (t) setTab(t);
+    const tpl = q.get("tpl");
+    if (tpl) sessionStorage.setItem("fafo-quick-tpl", tpl);
+  }, []);
 
   useEffect(() => {
     const t = (localStorage.getItem(THEME_STORAGE_KEY) as "light" | "dark" | "system") || "system";
@@ -252,6 +271,11 @@ export function AppShell() {
       <main className="mx-auto w-full max-w-4xl px-3 py-4 pb-8 sm:px-6 sm:py-6 sm:pb-10">
         <StatsGrid offenses={offenses} findOuts={findOuts} perks={perks} role={role} />
 
+        <InstallHint />
+        <TruceBanner />
+        <AmnestyBanner onOpen={() => selectTab("findout")} />
+        <ParoleBanner onOpen={() => selectTab("findout")} />
+        <PeaceBanner onOpen={() => selectTab("perks")} />
         <FoWarrant onOpen={() => selectTab("findout")} />
 
         <PerkBank onOpen={() => selectTab("perks")} />
@@ -289,6 +313,9 @@ export function AppShell() {
           </TabsContent>
           <TabsContent value="insights" className="mt-0">
             <Insights />
+          </TabsContent>
+          <TabsContent value="review" className="mt-0">
+            <ReviewPanel />
           </TabsContent>
           <TabsContent value="fafo" className="mt-0">
             <FafoReport />

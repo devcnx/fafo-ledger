@@ -41,6 +41,7 @@ export function OffenseList() {
     deleteOffense,
     setStatus,
     updateOffense,
+    reaffirmOffense,
     submitDispute,
     resolveDispute,
     withdrawDispute,
@@ -193,6 +194,7 @@ export function OffenseList() {
             <option value="open">Open</option>
             <option value="forgiven">Forgiven</option>
             <option value="pattern">Pattern</option>
+            <option value="stale">Stale</option>
           </select>
           <select
             value={category}
@@ -239,10 +241,20 @@ export function OffenseList() {
                             ? "danger"
                             : o.status === "forgiven"
                               ? "success"
-                              : "warn"
+                              : o.status === "stale"
+                                ? "muted"
+                                : "warn"
                         }
                       >
-                        {o.status === "open" ? "Open" : o.status === "forgiven" ? "Forgiven" : o.status === "pattern" ? "Pattern" : o.status}
+                        {o.status === "open"
+                            ? "Open"
+                            : o.status === "forgiven"
+                              ? "Forgiven"
+                              : o.status === "pattern"
+                                ? "Pattern"
+                                : o.status === "stale"
+                                  ? "Stale"
+                                  : o.status}
                       </Badge>
                       <Badge variant="outline">
                         {nameForRole(o.authorRole)} → {nameForRole(o.againstRole)}
@@ -383,6 +395,19 @@ export function OffenseList() {
                       >
                         <Gavel className="size-3.5" />
                         Issue Find Out
+                      </Button>
+                    ) : null}
+                    {o.status === "stale" && !o.archived ? (
+                      <Button
+                        variant="soft"
+                        size="sm"
+                        onClick={() =>
+                          void reaffirmOffense(o.id).then(() =>
+                            toast.success("Reaffirmed. The Clock Starts Over."),
+                          )
+                        }
+                      >
+                        Still Mad — Reaffirm
                       </Button>
                     ) : null}
                     {canDispute(o) ? (

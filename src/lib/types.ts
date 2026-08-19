@@ -2,7 +2,7 @@ import type { AppRole } from "./roles";
 
 export type Severity = 1 | 2 | 3 | 4 | 5;
 
-export type OffenseStatus = "open" | "forgiven" | "pattern";
+export type OffenseStatus = "open" | "forgiven" | "pattern" | "stale";
 
 export type EvidenceType = "image" | "text" | "audio";
 
@@ -35,6 +35,7 @@ export type Offense = {
   createdBy: string;
   createdAt: string;
   updatedAt: string;
+  statuteResetOn: string | null;
 };
 
 export type Profile = {
@@ -51,6 +52,8 @@ export type SeverityLabels = Partial<Record<Severity, string>>;
 export type AppSettings = {
   severityLabels: SeverityLabels;
   purgeForgivenDays: number;
+  statuteDays: number;
+  coolingOffMinutes: number;
 };
 
 export type Apology = {
@@ -160,6 +163,8 @@ export type PerkKind = "favor" | "pass" | "date" | "jail_pass";
 
 export type PerkStatus = "available" | "pending" | "redeemed" | "revoked" | "burned";
 
+export type PerkSource = "manual" | "fo_served" | "peace_streak" | "calendar_act" | "bond";
+
 export type Perk = {
   id: string;
   title: string;
@@ -169,11 +174,65 @@ export type Perk = {
   grantedByRole: AppRole;
   grantedByEmail: string;
   assignedToRole: AppRole;
-  source: "manual" | "fo_served";
+  source: PerkSource;
   sourceId: string | null;
   expiresOn: string | null;
   redeemedAt: string | null;
   honorNote: string;
   createdAt: string;
   updatedAt: string;
+};
+
+export type BondStatus = "escrow" | "released" | "burned";
+
+export type Bond = {
+  id: string;
+  title: string;
+  body: string;
+  kind: PerkKind;
+  category: string;
+  days: number;
+  assignedToRole: AppRole;
+  grantedByRole: AppRole;
+  grantedByEmail: string;
+  status: BondStatus;
+  releasesOn: string;
+  resolvedAt: string | null;
+  perkId: string | null;
+  note: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type Parole = {
+  id: string;
+  role: AppRole;
+  category: string;
+  findOutId: string | null;
+  endsOn: string;
+  createdAt: string;
+};
+
+export type BargainStatus = "pending" | "accepted" | "rejected";
+
+export type BargainOffer = {
+  id: string;
+  findOutId: string;
+  proposedByRole: AppRole;
+  title: string;
+  body: string;
+  dueDate: string | null;
+  status: BargainStatus;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type PeaceMilestone = 7 | 14 | 30;
+
+export type PeaceStreakInfo = {
+  role: AppRole;
+  days: number;
+  nextMilestone: PeaceMilestone | null;
+  daysUntilNext: number;
+  streakStart: string;
 };
